@@ -164,6 +164,7 @@ async function start() {
   $("#whoTitle").textContent = s.user.id !== "me" && s.user.email ? `Previewing as ${s.user.name} · ${s.user.title}` : s.user.title;
   state.orgs = await api("orgs");
   document.querySelectorAll("[data-admin]").forEach((a) => (a.hidden = s.user.role === "investor"));
+  $("#newOrg").hidden = STATIC || !s.user.superuser;
   $("#login").hidden = true;
   $("#shell").hidden = false;
   render();
@@ -194,6 +195,12 @@ function crumbs(parts) { $("#crumbs").innerHTML = parts.map((p, i) => (i === par
 async function render() {
   hideTip();
   const r = route();
+  if (state.stmt && state.stmt !== r.id) state.stmt = null;
+  if (r.org === "new-org") {
+    if (STATIC || !state.user.superuser) return go((state.orgs.find((o) => o.access) || {}).id, "overview");
+    renderSide(r); $("#side").classList.remove("open"); crumbs(["New organization"]);
+    return drawOrgForm($("#view"), null);
+  }
   const first = state.orgs.find((o) => o.access && o.hasData) || state.orgs.find((o) => o.access);
   if (!r.org || !state.orgs.some((o) => o.id === r.org && o.access)) { if (first) go(first.id, "overview"); return; }
   if (r.view === "investors" && state.user.role === "investor") { go(r.org, "overview"); return; }
@@ -205,6 +212,7 @@ async function render() {
   crumbs([...trail, viewName]);
   const view = $("#view");
   try {
+    if (r.view === "capitalize" && state.user.superuser && !STATIC) { crumbs([...trail, "Initial capitalization"]); return drawOrgForm(view, org); }
     if (!org.hasData) return renderNoData(view, org);
     if (r.view === "events") return await renderEvents(view, r);
     if (r.view === "investors") return await renderInvestors(view, r);
@@ -224,14 +232,20 @@ function renderNoData(view, org) {
         <div class="s">${k.hasData ? "Ledger active" : "No events yet"}</div></a>`).join("")}</div>` : ""}
     <div class="card empty">
       <svg viewBox="0 0 20 20"><path d="M4 3h9l3 3v11H4zm8 1v3h3"/></svg>
-      <p><b>No events recorded${kids.length ? " at this level" : ""}.</b><br>${kids.length ? "Ownership is tracked in the sub-organizations above." : "Import an ownership workbook or record the initial capitalization to begin."}</p>
-      <button class="btn primary" disabled>Import workbook</button>
+      <p><b>No events recorded${kids.length ? " at this level" : ""}.</b><br>${kids.length ? "Ownership is tracked in the sub-organizations above." : "Record the initial capitalization to begin."}</p>
+      ${!kids.length && state.user.superuser && !STATIC ? `<a class="btn primary" href="#/${org.id}/capitalize">Enter the initial capitalization</a>` : ""}
     </div>`;
 }
 
 // ---------- overview ----------
 async function renderOverview(view, r) {
   const s = await api(`orgs/${r.org}/summary`);
+  if (!s.asOfEventId) {
+    view.innerHTML = `<h1>${esc(state.orgs.find((o) => o.id === r.org)?.name || "")}</h1>
+      <div class="card empty" style="margin-top:18px"><p><b>Nothing is finalized yet.</b><br>The initial capitalization is still a draft.</p>
+      <a class="btn primary" href="#/${r.org}/events">Review the draft</a></div>`;
+    return;
+  }
   const inv = state.user.role === "investor";
   const last = s.distributions[s.distributions.length - 1] || {};
   const tiles = inv ? `
@@ -315,18 +329,33 @@ function niceStep(raw) { const p = 10 ** Math.floor(Math.log10(raw || 1)); const
 
 // ---------- events ----------
 const TYPES = ["All", "Distribution", "Admission", "Retirement", "Capital Call", "Scenario"];
+// creating events needs the live server and an admin role; the review snapshot is read-only
+// the review snapshot shows the form so it can be reviewed, but nothing can be calculated or saved there
+const canDraft = () => ["org_admin", "platform_admin"].includes(state.user.role);
+const canWrite = () => !STATIC && ["org_admin", "platform_admin"].includes(state.user.role);
+
+async function post(path, body) {
+  const r = await fetch("/api/" + path, { method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Demo-User": state.persona }, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) showLogin();
+  if (!r.ok) throw Object.assign(new Error(j.error || "Request failed"), { status: r.status });
+  return j;
+}
 
 async function renderEvents(view, r) {
   if (state.eventsOrg !== r.org || !state.events) { state.events = await api(`orgs/${r.org}/events`); state.eventsOrg = r.org; }
   const evs = state.events;
   if (!r.id) {
-    const pick = [...evs].reverse().find((e) => e.status === "Final") || evs[0];
+    const pick = evs.find((e) => e.status === "Draft") || [...evs].reverse().find((e) => e.status === "Final") || evs[0];
     if (pick) { history.replaceState(null, "", `#/${r.org}/events/${pick.id}`); r.id = pick.id; }
   }
+  if (r.id === "new") return canDraft() ? drawEventPage(view, r) : go(r.org, "events");
   if (!$(".events", view)) {
     view.innerHTML = `<div class="events">
       <div class="card timeline">
         <div class="tl-filters">
+          ${canDraft() ? `<a class="btn primary new-event" href="#/${r.org}/events/new">+ New event</a>` : ""}
           <input class="search" id="q" placeholder="Search events or tabs…" value="${esc(state.filter.q)}">
           <div class="seg" id="types">${TYPES.filter((t) => state.user.role !== "investor" || t !== "Scenario").map((t) => `<button data-t="${t}">${t}</button>`).join("")}</div>
           ${state.user.role === "investor" ? "" : `<label class="toggle"><input type="checkbox" id="scen"> Include scenarios, summaries &amp; superseded</label>`}
@@ -338,8 +367,219 @@ async function renderEvents(view, r) {
     $("#types").onclick = (e) => { const t = e.target.dataset.t; if (!t) return; state.filter.type = t; if (t === "Scenario") state.filter.scenarios = true; drawTimeline(r); };
     const sc = $("#scen"); if (sc) { sc.checked = state.filter.scenarios; sc.onchange = () => { state.filter.scenarios = sc.checked; drawTimeline(r); }; }
   }
+  const ne = $(".new-event", view); if (ne) ne.href = `#/${r.org}/events/new`;
   drawTimeline(r);
   await drawReport(r);
+}
+
+// ---------- new event (its own page) ----------
+const blankForm = () => ({ kind: "", date: "", scenario: false, joiners: [{ name: "", units: 1 }], devSells: true,
+  leavers: [""], how: "", to: "all", buyer: "", newcomer: "", units: {}, cash: "", capital: "", callJoiners: [] });
+const money = (t) => { const n = Number(String(t).replace(/[$,\s]/g, "")); return Number.isFinite(n) ? n : NaN; };
+const posText = (u) => String(+Number(u || 0).toFixed(4));
+const KINDS = [
+  ["admission", "Admit partners", "New partners buy in. Existing partners sell down so total capital stays the same.",
+    "M8 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-6 8c0-3 2.7-5 6-5s6 2 6 5zM15 5h2v3h3v2h-3v3h-2v-3h-3V8h3z"],
+  ["retirement", "Retire partners", "Partners are paid out at par. Their shares go to the remaining partners or to one of them.",
+    "M8 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-6 8c0-3 2.7-5 6-5s6 2 6 5zM12 8h8v2h-8z"],
+  ["retire_admit", "Retire and admit", "Partners leave and new partners or an entity come in on the same date, as one event.",
+    "M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-5 8c0-3 2.2-5 5-5s5 2 5 5zM15 3l4 3-4 3V7h-4V5h4zm-1 8v2h4v2h-4v2l-4-3z"],
+  ["restructure", "Change positions", "Resize one or more partners' positions. Everyone else adjusts in proportion.",
+    "M3 5h9V2l5 4-5 4V7H3zm14 10H8v3l-5-4 5-4v3h9z"],
+  ["distribution", "Pay a distribution", "Cash is paid to the current partners in proportion to their shares. Positions don't change.",
+    "M2 5h16v10H2zm8 2.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"],
+  ["capital_call", "Capital call", "Partners contribute new capital in proportion to their positions. This raises the capital base.",
+    "M3 17h14v-2H3zm6-4h2V7h3l-4-5-4 5h3z"],
+];
+
+async function drawEventPage(view, r) {
+  const [inv, sum] = await Promise.all([api(`orgs/${r.org}/investors`), api(`orgs/${r.org}/summary`)]);
+  const members = inv.filter((m) => m.status === "Active").sort((a, b) => a.name.localeCompare(b.name));
+  const org = state.orgs.find((o) => o.id === r.org) || {};
+  if (!members.length) {
+    view.innerHTML = `<div class="card empty"><p><b>${esc(org.name || "This organization")} has no partners on record yet.</b><br>Events can be recorded once its initial capitalization is finalized.</p>
+      <a class="btn" href="#/${r.org}/events">Back to events</a></div>`;
+    return;
+  }
+  const total = members.reduce((a, m) => a + m.shares, 0);
+  view.innerHTML = `<div class="ev-new">
+    <div class="card" id="report"></div>
+    <aside class="card roster">
+      <h3>Partners today</h3>
+      <div class="muted">${esc(org.name || "")}${sum.asOf ? ` · as of ${esc(fmtSheetDate(sum.asOf))}` : ""}</div>
+      <div class="roster-kpi"><div><span>Capital</span><b>${fmt(sum.capital, "usd0")}</b></div><div><span>Shares</span><b>${fmt(total, "num")}</b></div></div>
+      <table><tbody>${[...members].sort((a, b) => b.shares - a.shares).map((m) => `<tr><td>${esc(shortName(m.name))}</td><td>${fmt(m.shares, "num")}</td><td>${fmt(m.shares / total, "pct")}</td></tr>`).join("")}</tbody></table>
+    </aside></div>`;
+  drawEventForm(r, members);
+}
+
+function drawEventForm(r, members, error) {
+  const box = $("#report");
+  const latest = state.events.filter((e) => e.status === "Final" && e.date).map((e) => e.date).sort().pop() || "";
+  const f = state.form || (state.form = blankForm());
+  const again = (err) => drawEventForm(r, members, err);
+  const opt = (sel, skip = []) => `<option value="">Choose a partner…</option>` + members.filter((m) => m.key === sel || !skip.includes(m.key))
+    .map((m) => `<option value="${m.key}" ${m.key === sel ? "selected" : ""}>${esc(m.name)} — ${fmt(m.shares, "num")} shares</option>`).join("");
+  const step = (n, t) => `<h2 class="step"><i>${n}</i>${t}</h2>`;
+
+  const joinerRows = (sizes, ph = "Last, First, M.D.") => `
+      <label class="fl">New partner(s)</label>
+      <div id="joiners">${f.joiners.map((j, i) => `<div class="jrow">
+        <input class="fi jn" data-i="${i}" placeholder="${ph}" value="${esc(j.name)}" required>
+        ${sizes ? `<select class="fi ju" data-i="${i}" aria-label="Position size">
+          <option value="1" ${+j.units === 1 ? "selected" : ""}>Full position</option>
+          <option value="0.5" ${+j.units === 0.5 ? "selected" : ""}>Half position</option>
+          <option value="0.3333333333" ${Math.abs(j.units - 1 / 3) < 0.001 ? "selected" : ""}>One-third position</option>
+        </select>` : ""}
+        ${f.joiners.length > 1 ? `<button type="button" class="btn x" data-list="joiners" data-i="${i}" aria-label="Remove">×</button>` : ""}</div>`).join("")}</div>
+      <button type="button" class="btn add" data-add="joiners">+ Add another</button>`;
+  const devToggle = () => `
+      <label class="toggle fl2"><input type="checkbox" id="devSells" ${f.devSells ? "checked" : ""}> The developer sells down along with the physicians</label>
+      <div class="hint">Checked: everyone sells down in proportion. Unchecked: only the physicians sell down.</div>`;
+  const leaverRows = () => `
+      <label class="fl">Retiring partner(s)</label>
+      <div>${f.leavers.map((k, i) => `<div class="jrow">
+        <select class="fi lv" data-i="${i}" required>${opt(k, f.leavers)}</select>
+        ${f.leavers.length > 1 ? `<button type="button" class="btn x" data-list="leavers" data-i="${i}" aria-label="Remove">×</button>` : ""}</div>`).join("")}</div>
+      <button type="button" class="btn add" data-add="leavers">+ Add another</button>
+      <div class="hint">Each is paid their capital at par and keeps the share-months earned so far.</div>`;
+  // one-for-one by default; uneven numbers (two out, one in) can only be a re-split
+  const how = () => f.how || (f.joiners.length === f.leavers.length ? "takeover" : "resplit");
+
+  const details = {
+    admission: () => joinerRows(true) + devToggle(),
+    retire_admit: () => `${leaverRows()}${joinerRows(how() === "resplit", "Last, First, M.D. or entity name")}
+      <label class="fl">How do the shares move?</label>
+      <div class="choices">
+        <label class="toggle"><input type="radio" name="how" value="takeover" ${how() === "takeover" ? "checked" : ""}> <span>The new partners take over the retiring partners' shares exactly. Nobody else changes.</span></label>
+        <label class="toggle"><input type="radio" name="how" value="resplit" ${how() === "resplit" ? "checked" : ""}> <span>Re-split. The retiring partners are paid out, the new partners buy in at their own position size, and everyone else adjusts.</span></label>
+      </div>
+      ${how() === "resplit" ? devToggle() : `<div class="hint">With equal numbers, each new partner takes the position of the retiring partner on the same row. A single new partner or entity takes them all.</div>`}`,
+    retirement: () => `${leaverRows()}
+      <label class="fl">Who takes the shares?</label>
+      <div class="choices">
+        <label class="toggle"><input type="radio" name="to" value="all" ${f.to === "all" ? "checked" : ""}> All remaining partners, in proportion to what they hold</label>
+        <label class="toggle"><input type="radio" name="to" value="buyer" ${f.to === "buyer" ? "checked" : ""}> One current partner buys them</label>
+        ${f.to === "buyer" ? `<select class="fi sub" id="buyer" required>${opt(f.buyer, f.leavers)}</select>` : ""}
+      </div>`,
+    restructure: () => `
+      <label class="fl">Position sizes</label>
+      <div class="pos-head"><span>Partner</span><span>Shares now</span><span>Position</span></div>
+      ${members.map((m) => { const cur = posText(m.units), v = f.units[m.key] ?? cur; return `<div class="pos-row ${v !== cur ? "chg" : ""}">
+        <span>${esc(m.name)}</span><span>${fmt(m.shares, "num")}</span>
+        <input class="fi pu" data-k="${m.key}" data-cur="${cur}" inputmode="decimal" value="${esc(v)}" aria-label="Position for ${esc(m.name)}"></div>`; }).join("")}
+      <div class="hint">1 = one full physician position. Change only the partners whose position is changing; total capital stays the same and everyone else adjusts in proportion.</div>`,
+    distribution: () => `
+      <label class="fl" for="cash">Cash to distribute</label>
+      <input class="fi" id="cash" inputmode="decimal" placeholder="$0.00" value="${esc(f.cash)}" required>
+      <div class="hint">Paid to partners holding shares on the effective date. Retired partners are not paid; their share-months stay on record for a sale.</div>`,
+    capital_call: () => `
+      <label class="fl" for="capital">Additional capital required</label>
+      <input class="fi" id="capital" inputmode="decimal" placeholder="$0.00" value="${esc(f.capital)}" required>
+      <div class="hint">Each partner contributes in proportion to their position and receives new shares at par.</div>
+      <label class="fl">New partners joining with this call (optional)</label>
+      <div>${f.callJoiners.map((j, i) => `<div class="jrow">
+        <input class="fi cjn" data-i="${i}" placeholder="Last, First, M.D." value="${esc(j.name)}" required>
+        <button type="button" class="btn x" data-list="callJoiners" data-i="${i}" aria-label="Remove">×</button></div>`).join("")}</div>
+      <button type="button" class="btn add" data-add="callJoiners">+ Add a new partner</button>
+      <div class="hint">A partner who joins here pays one physician's share of the call only, so holds a partial position afterwards.</div>`,
+  };
+
+  box.innerHTML = `
+    <form class="ev-form" id="evForm">
+      <div class="rep-meta"><a href="#/${r.org}/events">← Events</a><span>·</span><span>${STATIC ? "Review copy: you can try the form, but previewing and saving need the live app." : "Nothing is recorded until you finalize."}</span></div>
+      <h1>New event</h1>
+      ${step(1, "What happened?")}
+      <div class="kinds">${KINDS.map(([k, t, d, icon]) => `<label class="kind ${f.kind === k ? "on" : ""}"><input type="radio" name="kind" value="${k}" ${f.kind === k ? "checked" : ""}>
+        <svg viewBox="0 0 20 20"><path fill-rule="evenodd" d="${icon}"/></svg><b>${t}</b><span>${d}</span></label>`).join("")}</div>
+      ${f.kind ? `
+        ${step(2, "When?")}
+        <label class="fl" for="evDate">Effective date</label>
+        <input class="fi date" type="date" id="evDate" required value="${esc(f.date)}" ${latest ? `min="${latest}"` : ""}>
+        <div class="hint">${latest ? `On or after the latest recorded event (${fmtIso(latest)}). ` : ""}${f.kind === "distribution" ? "" : "Share-months are counted from this date."}</div>
+        ${step(3, "Details")}
+        ${details[f.kind]()}
+        <label class="toggle whatif"><input type="checkbox" id="scenario" ${f.scenario ? "checked" : ""}> <span><b>What-if only.</b> Save as a scenario for comparison; it never becomes part of the record.</span></label>
+        <div class="login-err" id="evErr" role="alert">${esc(error || "")}</div>
+        <div class="btns"><button class="btn primary" type="submit" id="evGo">Preview the result</button><a class="btn" href="#/${r.org}/events" id="evCancel">Cancel</a></div>`
+      : `<div class="hint">Choose the kind of event to continue.</div>`}
+    </form>`;
+
+  const read = () => {
+    const v = (id) => $("#" + id);
+    if (v("evDate")) f.date = v("evDate").value;
+    if (v("scenario")) f.scenario = v("scenario").checked;
+    box.querySelectorAll(".jn").forEach((el) => (f.joiners[+el.dataset.i].name = el.value));
+    box.querySelectorAll(".ju").forEach((el) => (f.joiners[+el.dataset.i].units = +el.value));
+    box.querySelectorAll(".lv").forEach((el) => (f.leavers[+el.dataset.i] = el.value));
+    box.querySelectorAll(".cjn").forEach((el) => (f.callJoiners[+el.dataset.i].name = el.value));
+    box.querySelectorAll(".pu").forEach((el) => { if (el.value.trim() === el.dataset.cur) delete f.units[el.dataset.k]; else f.units[el.dataset.k] = el.value.trim(); });
+    if (v("devSells")) f.devSells = v("devSells").checked;
+    if (v("buyer")) f.buyer = v("buyer").value;
+    if (v("newcomer")) f.newcomer = v("newcomer").value;
+    const to = box.querySelector("input[name=to]:checked"); if (to) f.to = to.value;
+    if (f.to === "new") f.to = "all";
+    if (v("cash")) f.cash = v("cash").value;
+    if (v("capital")) f.capital = v("capital").value;
+  };
+  const blank = { joiners: () => ({ name: "", units: 1 }), leavers: () => "", callJoiners: () => ({ name: "" }) };
+  box.querySelectorAll("input[name=kind]").forEach((el) => (el.onchange = () => { read(); f.kind = el.value; again(); }));
+  box.querySelectorAll("input[name=to], .lv").forEach((el) => (el.onchange = () => { read(); again(); }));
+  box.querySelectorAll("input[name=how]").forEach((el) => (el.onchange = () => { read(); f.how = el.value; again(); }));
+  box.querySelectorAll(".add").forEach((el) => (el.onclick = () => { read(); f[el.dataset.add].push(blank[el.dataset.add]()); again(); }));
+  box.querySelectorAll(".x").forEach((el) => (el.onclick = () => { read(); f[el.dataset.list].splice(+el.dataset.i, 1); again(); }));
+  box.querySelectorAll(".pu").forEach((el) => (el.oninput = () => el.closest(".pos-row").classList.toggle("chg", el.value.trim() !== el.dataset.cur)));
+  const cancel = $("#evCancel"); if (cancel) cancel.onclick = () => { state.form = null; };
+
+  $("#evForm").onsubmit = async (ev) => {
+    ev.preventDefault(); read();
+    if (STATIC) return again("This review copy is read-only. The result is calculated in the live app.");
+    const nameOf = (k) => shortName(members.find((m) => m.key === k)?.name || "");
+    let body;
+    if (f.kind === "admission") {
+      const js = f.joiners.map((j) => ({ name: j.name.trim(), units: j.units })).filter((j) => j.name);
+      body = { type: "admission", title: "Admit " + js.map((j) => shortName(j.name)).join(", "), inputs: { joiners: js, developer_sells_down: f.devSells } };
+    } else if (f.kind === "retirement") {
+      const ls = f.leavers.filter(Boolean), who = ls.map(nameOf).join(", ");
+      if (new Set(ls).size !== ls.length) return again("The same partner is listed twice.");
+      if (f.to === "all" && ls.length >= members.length) return again("Someone has to remain to take the shares. Choose a buyer, or use Retire and admit.");
+      if (f.to === "buyer" && ls.includes(f.buyer)) return again("The buyer can't be one of the retiring partners.");
+      body = { type: "retirement", title: "Retire " + who,
+               inputs: { leavers: ls.map((id) => ({ memberId: id, ...(f.to === "buyer" ? { buyer: { memberId: f.buyer } } : {}) })) } };
+    } else if (f.kind === "retire_admit") {
+      const ls = f.leavers.filter(Boolean), js = f.joiners.map((j) => ({ name: j.name.trim(), units: j.units })).filter((j) => j.name);
+      if (new Set(ls).size !== ls.length) return again("The same partner is listed twice.");
+      let inputs;
+      if (how() === "resplit") inputs = { leavers: ls.map((id) => ({ memberId: id })), joiners: js, developer_sells_down: f.devSells };
+      else if (js.length === ls.length) inputs = { replacements: ls.map((id, i) => ({ leaver: { memberId: id }, joiner: { name: js[i].name } })) };
+      else if (js.length === 1) inputs = { leavers: ls.map((id) => ({ memberId: id, buyer: { name: js[0].name } })) };
+      else return again("For an exact takeover, list one new partner per retiring partner, or a single new partner or entity. Otherwise choose Re-split.");
+      body = { type: "retire_admit", title: `Retire ${ls.map(nameOf).join(", ")}; admit ${js.map((j) => shortName(j.name)).join(", ")}`, inputs };
+    } else if (f.kind === "restructure") {
+      const ch = Object.entries(f.units).map(([k, t]) => ({ memberId: k, units: Number(t) }));
+      if (!ch.length) return again("Change at least one partner's position.");
+      if (ch.some((c) => !(c.units > 0))) return again("A position must be a number greater than zero. To remove a partner, record a retirement.");
+      body = { type: "restructure", title: "Change positions: " + ch.map((c) => nameOf(c.memberId)).join(", "), inputs: { units: ch } };
+    } else if (f.kind === "distribution") {
+      const cash = money(f.cash);
+      if (!(cash > 0)) return again("Enter the cash to distribute as a dollar amount.");
+      body = { type: "distribution", title: `${(f.date || "").slice(0, 4)} Distributions`, inputs: { cash_to_distribute: cash } };
+    } else {
+      const cap = money(f.capital);
+      if (!(cap > 0)) return again("Enter the additional capital as a dollar amount.");
+      const js = f.callJoiners.map((j) => ({ name: j.name.trim(), units: 1 })).filter((j) => j.name);
+      body = { type: "capital_call", title: `Capital call — ${usd0.format(cap)}`, inputs: { additional_capital: cap, joiners: js } };
+    }
+    body.date = f.date; body.scenario = f.scenario;
+    if (f.scenario) body.title = "What if: " + body.title;
+    const btn = $("#evGo"); btn.disabled = true; btn.textContent = "Calculating…";
+    try {
+      const out = await post(`orgs/${r.org}/events`, body);
+      state.events = null;
+      if (f.scenario) { state.form = null; state.filter.scenarios = true; }
+      go(r.org, "events", out.id);
+    } catch (e) { again(e.message); }
+  };
 }
 
 function typeMatch(e, t) {
@@ -355,11 +595,12 @@ function drawTimeline(r) {
   document.querySelectorAll("#types button").forEach((b) => b.classList.toggle("on", b.dataset.t === f.type));
   const sc = $("#scen"); if (sc) sc.checked = f.scenarios;
   const q = f.q.trim().toLowerCase();
-  const list = state.events.filter((e) => (f.scenarios || e.status === "Final" || e.id === r.id) && typeMatch(e, f.type)
+  const list = state.events.filter((e) => (f.scenarios || e.status === "Final" || e.status === "Draft" || e.id === r.id) && typeMatch(e, f.type)
     && (!q || `${e.title} ${e.sheet} ${e.asOf}`.toLowerCase().includes(q)));
   const groups = {};
-  [...list].reverse().forEach((e) => { const y = e.status === "Scenario" ? "Scenarios & analyses" : (e.date || "").slice(0, 4) || "Undated"; (groups[y] = groups[y] || []).push(e); });
-  const keys = Object.keys(groups).sort((a, b) => (a.startsWith("S") ? 1 : b.startsWith("S") ? -1 : b.localeCompare(a)));
+  [...list].reverse().forEach((e) => { const y = e.status === "Draft" ? "Drafts" : e.status === "Scenario" ? "Scenarios & analyses" : (e.date || "").slice(0, 4) || "Undated"; (groups[y] = groups[y] || []).push(e); });
+  const rank = (k) => (k === "Drafts" ? 0 : k.startsWith("S") ? 2 : 1);
+  const keys = Object.keys(groups).sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
   $("#tl").innerHTML = keys.map((k) => `<div class="tl-year">${esc(k)}</div>` + groups[k].map((e) => `
     <a class="tl-item ${e.id === r.id ? "on" : ""}" href="#/${r.org}/events/${e.id}">
       <span class="node"></span>
@@ -373,6 +614,7 @@ async function drawReport(r) {
   const box = $("#report");
   if (!r.id) { box.innerHTML = `<div class="empty">Select an event.</div>`; return; }
   const e = await api(`orgs/${r.org}/events/${encodeURIComponent(r.id)}`);
+  if (state.stmt === e.id) return drawStatements(e, r);
   const f = state.filter;
   const roleCol = (role) => e.columns.find((c) => c.role === role);
   const activity = ["post_shares", "pre_shares", "add_shares", "distribution", "notes"].map(roleCol).filter(Boolean);
@@ -413,14 +655,27 @@ async function drawReport(r) {
   $("#report").innerHTML = `
     <div class="rep-h">
       <div class="title">
-        <div class="rep-meta">${chip(e.type, e.status)}<span>As of ${esc(e.asOf || "—")}</span><span>·</span><span>Source tab “${esc(e.sheet)}”</span>${e.status !== "Final" ? `<span>·</span><b>${esc(e.status)}</b>` : ""}</div>
+        <div class="rep-meta">${chip(e.type, e.status)}<span>As of ${esc(e.asOf || "—")}</span>${e.sheet && e.sheet !== e.title ? `<span>·</span><span>Source tab “${esc(e.sheet)}”</span>` : ""}${e.status !== "Final" ? `<span>·</span><b>${esc(e.status)}</b>` : ""}</div>
         <h1>${esc(e.title)}</h1>
       </div>
       <div class="btns">
+        <button class="btn" id="stmts"><svg viewBox="0 0 20 20"><path d="M5 2h8l3 3v13H5zm2 6v2h7V8zm0 4v2h7v-2z"/></svg>Statements</button>
         <button class="btn" id="csv"><svg viewBox="0 0 20 20"><path d="M9 3h2v8l3-3 1.4 1.4L10 14.8 4.6 9.4 6 8l3 3zM4 16h12v2H4z"/></svg>CSV</button>
         <button class="btn" onclick="print()"><svg viewBox="0 0 20 20"><path d="M5 2h10v4H5zm-2 5h14a1 1 0 0 1 1 1v6h-3v4H5v-4H2V8a1 1 0 0 1 1-1zm4 7v2h6v-2z"/></svg>PDF</button>
       </div>
     </div>
+    ${e.status === "Draft" ? `<div class="draft-bar">
+      <div><b>Draft — not part of the official record yet.</b>
+        <span class="${e.check && e.check.ok ? "ok" : "bad"}">${!(e.check && e.check.ok) ? "✗ Total shares would change — this draft can't be finalized."
+          : e.check.new_epoch ? `✓ New capital base: ${fmt(e.check.capital, "usd0")} · ${fmt(e.check.shares, "num")} shares.`
+          : e.rawType === "distribution" ? `✓ ${fmt(e.totals.ds, "usd")} paid out; positions are unchanged.` : "✓ Total capital and shares are unchanged."}</span>
+        Review each partner's before and after below.</div>
+      ${canWrite() ? `<div class="btns"><button class="btn primary" id="fin" ${e.check && e.check.ok ? "" : "disabled"}>Finalize</button><button class="btn" id="edit">Change inputs</button><button class="btn" id="disc">Discard</button></div>` : ""}
+      <div class="login-err" id="draftErr" role="alert"></div></div>` : ""}
+    ${e.status === "Scenario" && e.inputs && canWrite() ? `<div class="draft-bar">
+      <div><b>What-if scenario — not part of the official record.</b> It shows what this event would do to the partnership as it stood when the scenario was saved.</div>
+      <div class="btns"><button class="btn" id="disc">Delete scenario</button></div>
+      <div class="login-err" id="draftErr" role="alert"></div></div>` : ""}
     ${e.scoped ? `<div class="lock-note" style="margin:8px 22px 0"><svg viewBox="0 0 20 20"><path d="M10 1l7 3v5c0 4.4-3 8.4-7 10-4-1.6-7-5.6-7-10V4z"/></svg>Showing your line and partnership totals only. Other members' positions are not sent to your browser.</div>` : ""}
     <div class="rep-kpis">${kp.map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${v}</div></div>`).join("")}</div>
     ${ch.length ? `<div class="changes"><h3>What changed</h3><ul id="chl">${ch.slice(0, 6).map((x) => `<li><b>${esc(shortName(x.name))}</b> — ${esc(x.note)}</li>`).join("")}</ul>${ch.length > 6 ? `<span class="more" id="chm">Show all ${ch.length} changes</span>` : ""}</div>` : ""}
@@ -434,10 +689,162 @@ async function drawReport(r) {
       ${otherFacts.length ? `<div class="facts">${otherFacts.map((x) => `<span class="fact">${esc(x.label)}: <b>${esc(x.fmt === "text" ? x.value : fmt(x.value, x.fmt === "usd" ? "usd0" : x.fmt))}</b></span>`).join("")}</div>` : ""}
       ${e.notes.map((n) => `<div>${esc(n)}</div>`).join("")}</div>` : ""}`;
 
+  $("#stmts").onclick = () => { state.stmt = e.id; drawReport(r); };
+  const fin = $("#fin");
+  if (fin) fin.onclick = async () => {
+    if (!fin.dataset.armed) { fin.dataset.armed = 1; fin.textContent = "Confirm — this becomes permanent"; return; }
+    fin.disabled = true;
+    try { await post(`orgs/${r.org}/events/${e.id}/finalize`); state.events = null; state.form = null; state.capForm = null; state.orgs = await api("orgs"); render(); }
+    catch (err) { $("#draftErr").textContent = err.message; fin.disabled = false; }
+  };
+  const drop = async (reopen) => {
+    if (e.rawType === "capitalization") {
+      try {
+        if (reopen) state.capForm = { date: e.date, rows: ((e.inputs && e.inputs.members) || []).map((m) => ({ name: m.name, amount: String(m.amount), dev: !!m.isDeveloper })) };
+        await post(`orgs/${r.org}/events/${e.id}/discard`); state.events = null; state.orgs = await api("orgs");
+        location.hash = reopen ? `#/${r.org}/capitalize` : `#/${r.org}/overview`;
+      } catch (err) { $("#draftErr").textContent = err.message; }
+      return;
+    }
+    try { await post(`orgs/${r.org}/events/${e.id}/discard`); state.events = null; if (!reopen) state.form = null; go(r.org, "events", reopen ? "new" : null); }
+    catch (err) { $("#draftErr").textContent = err.message; }
+  };
+  const ed = $("#edit"); if (ed) ed.onclick = () => drop(true);
+  const dc = $("#disc"); if (dc) dc.onclick = () => drop(false);
   const hx = $("#hx"); if (hx) hx.onchange = () => { f.hideExited = hx.checked; drawReport(r); };
   const ac = $("#ac"); if (ac) ac.onchange = () => { f.allCols = ac.checked; drawReport(r); };
   const chm = $("#chm"); if (chm) chm.onclick = () => { $("#chl").innerHTML = ch.map((x) => `<li><b>${esc(shortName(x.name))}</b> — ${esc(x.note)}</li>`).join(""); chm.remove(); };
   $("#csv").onclick = () => downloadCsv(e, cols, rows);
+}
+
+// ---------- new organization + initial capitalization (superuser) ----------
+const blankCap = () => ({ name: "", kind: "partnership", parent: "", par: "10,000", date: "", rows: [{ name: "", amount: "", dev: false }, { name: "", amount: "", dev: false }, { name: "", amount: "", dev: false }] });
+
+function drawOrgForm(view, org, error) {
+  const f = state.capForm = { ...blankCap(), ...(state.capForm || {}) };
+  if (!f.rows || !f.rows.length) f.rows = blankCap().rows;
+  const par = org ? null : money(f.par);
+  const parents = state.orgs.filter((o) => o.access);
+  view.innerHTML = `
+    <form class="card ev-form org-form" id="orgForm">
+      <div class="rep-meta"><span class="chip"><i></i>${org ? "Initial capitalization" : "New organization"}</span><span>Nothing is recorded as final until you review and finalize.</span></div>
+      <h1>${org ? esc(org.name) : "Create an organization"}</h1>
+      ${org ? "" : `
+        <label class="fl" for="oName">Organization name</label>
+        <input class="fi" id="oName" required maxlength="120" placeholder="e.g. Riverside Building Partners, LLC" value="${esc(f.name)}">
+        <div class="frow">
+          <div><label class="fl" for="oKind">Type</label>
+            <select class="fi" id="oKind">${[["partnership", "Partnership"], ["practice", "Practice"], ["holding", "Holding company"], ["sub_entity", "Sub-entity"]].map(([v, l]) => `<option value="${v}" ${f.kind === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+          <div><label class="fl" for="oParent">Part of (optional)</label>
+            <select class="fi" id="oParent"><option value="">— a top-level organization —</option>${parents.map((o) => `<option value="${o.id}" ${f.parent === o.id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select></div>
+          <div><label class="fl" for="oPar">Par value per share</label>
+            <input class="fi" id="oPar" inputmode="decimal" value="${esc(f.par)}" required></div>
+        </div>`}
+
+      <h2 class="fsec">Initial capitalization</h2>
+      <label class="fl" for="oDate">Date funded</label>
+      <input class="fi" type="date" id="oDate" required value="${esc(f.date)}">
+      <div class="hint">Each investor's share-months start on this date.</div>
+
+      <label class="fl">Investors and the amount each put in</label>
+      <div class="cap-head"><span>Name</span><span>Amount invested</span><span>Developer</span><span></span></div>
+      <div id="capRows">${f.rows.map((row, i) => `<div class="cap-row">
+        <input class="fi cn" data-i="${i}" placeholder="Last, First, M.D." value="${esc(row.name)}" aria-label="Investor name">
+        <input class="fi ca" data-i="${i}" inputmode="decimal" placeholder="$0" value="${esc(row.amount)}" aria-label="Amount invested">
+        <label class="toggle" title="The developer holds a multiple of a physician's position"><input type="checkbox" class="cd" data-i="${i}" ${row.dev ? "checked" : ""}> Developer</label>
+        <button type="button" class="btn cx" data-i="${i}" aria-label="Remove investor" ${f.rows.length > 1 ? "" : "disabled"}>×</button></div>`).join("")}</div>
+      <div class="cap-actions"><button type="button" class="btn" id="capAdd">+ Add investor</button><button type="button" class="btn" id="capAdd5">+ Add 5 rows</button></div>
+      <div class="cap-total" id="capTotal" aria-live="polite"></div>
+
+      <div class="login-err" id="orgErr" role="alert">${esc(error || "")}</div>
+      <div class="btns"><button class="btn primary" type="submit" id="orgGo">${org ? "Preview the capitalization" : "Create and preview"}</button>
+        <a class="btn" href="#/${org ? org.id + "/overview" : ""}">Cancel</a></div>
+    </form>`;
+
+  const read = () => {
+    if (!org) { f.name = $("#oName").value; f.kind = $("#oKind").value; f.parent = $("#oParent").value; f.par = $("#oPar").value; }
+    f.date = $("#oDate").value;
+    view.querySelectorAll(".cn").forEach((el) => (f.rows[+el.dataset.i].name = el.value));
+    view.querySelectorAll(".ca").forEach((el) => (f.rows[+el.dataset.i].amount = el.value));
+    view.querySelectorAll(".cd").forEach((el) => (f.rows[+el.dataset.i].dev = el.checked));
+  };
+  // a running tally of what has been typed; the official figures come back from the server's preview
+  const tally = () => {
+    read();
+    const filled = f.rows.filter((x) => x.name.trim() && money(x.amount) > 0);
+    const total = filled.reduce((a, x) => a + money(x.amount), 0);
+    $("#capTotal").textContent = filled.length ? `${filled.length} investor${filled.length === 1 ? "" : "s"} entered · ${usd2.format(total)} total` : "";
+  };
+  view.querySelectorAll(".cn, .ca, .cd").forEach((el) => (el.oninput = tally));
+  const add = (n) => { read(); for (let i = 0; i < n; i++) f.rows.push({ name: "", amount: "", dev: false }); drawOrgForm(view, org); };
+  $("#capAdd").onclick = () => add(1);
+  $("#capAdd5").onclick = () => add(5);
+  view.querySelectorAll(".cx").forEach((el) => (el.onclick = () => { read(); f.rows.splice(+el.dataset.i, 1); drawOrgForm(view, org); }));
+  tally();
+
+  $("#orgForm").onsubmit = async (ev) => {
+    ev.preventDefault(); read();
+    const rows = f.rows.filter((x) => x.name.trim() || String(x.amount).trim());
+    const bad = rows.find((x) => !x.name.trim() || !(money(x.amount) > 0));
+    if (!rows.length) return drawOrgForm(view, org, "Enter at least one investor.");
+    if (bad) return drawOrgForm(view, org, `Each investor needs a name and an amount${bad.name.trim() ? ` (check ${bad.name.trim()})` : ""}.`);
+    if (!org && !(money(f.par) > 0)) return drawOrgForm(view, org, "Enter the par value per share.");
+    const btn = $("#orgGo"); btn.disabled = true; btn.textContent = "Working…";
+    let slug = org && org.id;
+    try {
+      if (!slug) {
+        slug = (await post("orgs", { name: f.name.trim(), kind: f.kind, parent: f.parent || null, par: money(f.par) })).id;
+        state.orgs = await api("orgs");
+      }
+      const out = await post(`orgs/${slug}/events`, { type: "capitalization", title: "Initial Capitalization", date: f.date,
+        inputs: { members: rows.map((x) => ({ name: x.name.trim(), amount: money(x.amount), isDeveloper: x.dev })) } });
+      state.orgs = await api("orgs"); state.events = null;
+      go(slug, "events", out.id);
+    } catch (e) {
+      // the organization may already exist at this point: carry on in "capitalize" mode so nothing is created twice
+      if (slug && !org) { state.capErr = e.message; location.hash = `#/${slug}/capitalize`; return; }
+      drawOrgForm(view, org, e.message);
+    }
+  };
+  if (state.capErr) { $("#orgErr").textContent = state.capErr; state.capErr = null; }
+}
+
+// ---------- per-partner statements (one printable page each) ----------
+function drawStatements(e, r) {
+  const org = state.orgs.find((o) => o.id === r.org);
+  const has = (id) => e.columns.some((c) => c.id === id);
+  const rows = e.rows.filter((row) => ["ps", "qs", "as", "ds"].some((id) => row.values[id]));
+  const line = (label, value, strong) => (value === null || value === undefined || value === "" ? "" :
+    `<tr class="${strong ? "strong" : ""}"><td>${label}</td><td>${value}</td></tr>`);
+  const one = (row) => {
+    const v = row.values, pre = v.ps || 0, post = v.qs ?? pre, delta = has("qs") ? post - pre : 0;
+    const par = e.kpis.totalShares ? e.kpis.totalInvestment / e.kpis.totalShares : 10000;
+    const moved = Math.abs(delta) > 0.00005;
+    const verb = v.as ? "Capital contributed" : post === 0 && pre > 0 ? "Shares redeemed" : delta > 0 ? "Shares purchased" : "Shares sold";
+    return `<section class="stmt">
+      <header><div class="brandline">Fair<b>Share</b></div><div class="stmt-org">${esc(org ? org.name : "")}</div></header>
+      <h2>Statement of account</h2>
+      <div class="stmt-who">${esc(row.name)}</div>
+      <div class="stmt-ev">${esc(e.title)} · effective ${esc(fmtIso(e.date))}${e.status !== "Final" ? ` · <b>${esc(e.status.toUpperCase())} — not final</b>` : ""}</div>
+      <table>
+        ${has("ps") ? line("Shares before", fmt(pre, "num")) + line("Capital account before", fmt(v.pi ?? pre * par, "usd")) : ""}
+        ${moved ? line(verb, `${fmt(Math.abs(delta), "num")} shares`) + line(delta > 0 ? "Amount you pay" : "Amount you receive", fmt(Math.abs(v.ai ?? delta * par), "usd"), true) : ""}
+        ${has("qs") ? line("Shares after", fmt(post, "num"), true) + line("Capital account after", fmt(v.qi ?? post * par, "usd")) : ""}
+        ${line("Ownership of the partnership", v.pc != null ? fmt(v.pc, "pct") : null)}
+        ${v.ds ? line("Distribution paid to you", fmt(v.ds, "usd"), true) : ""}
+        ${line("Loan guaranty", v.lg != null ? fmt(v.lg, "pct") : null)}
+        ${line("Indemnity", v.in != null ? fmt(v.in, "pct") : null)}
+        ${line("Share-months to date", v.sm != null ? fmt(v.sm, "num") : null)}
+      </table>
+      <footer>Shares are bought and sold at $10,000 par. Share-months accrue from your admission and determine your share of proceeds if the facility is sold.</footer>
+    </section>`;
+  };
+  $("#report").innerHTML = `
+    <div class="stmt-tools"><button class="btn" id="stBack">← Back to the event</button>
+      <span class="muted">${rows.length} statement${rows.length === 1 ? "" : "s"} · one page each</span>
+      <button class="btn primary" onclick="print()">Print / save as PDF</button></div>
+    <div class="stmts">${rows.map(one).join("")}</div>`;
+  $("#stBack").onclick = () => { state.stmt = null; drawReport(r); };
 }
 
 function downloadCsv(e, cols, rows) {
