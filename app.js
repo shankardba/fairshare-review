@@ -180,19 +180,52 @@ function ordered() {
   return out;
 }
 
+// ---------- organization tree (left panel) ----------
+const kidsOf = (id) => state.orgs.filter((o) => o.parent === id);
+const subtreeSize = (id) => kidsOf(id).reduce((n, k) => n + 1 + subtreeSize(k.id), 0);
+// a partner that is itself an LLC or trust, with its own members
+const entityTag = (o) => (!o.entityOf ? "" : /\btrust\b/i.test(o.name) ? "Trust" : "LLC");
+// collapse state: remembered per viewer; otherwise top level and the path to the open org start expanded
+let treePref = {};
+try { treePref = JSON.parse(localStorage.getItem("fs.tree") || "{}"); } catch { treePref = {}; }
+const saveTree = () => { try { localStorage.setItem("fs.tree", JSON.stringify(treePref)); } catch { /* storage unavailable */ } };
+
 function renderSide(r) {
-  $("#orgTree").innerHTML = ordered().map((o) => `
-    <a class="org lvl-${depth(o)} ${o.hasData ? "has-data" : ""} ${o.access ? "" : "locked"} ${o.id === r.org ? "active" : ""}"
-       ${o.access ? `href="#/${o.id}/overview"` : `title="Shown for context — no access granted"`}>
-      <span class="dot"></span><span>${esc(o.name)}</span>${o.access ? "" : `<span class="kind">🔒</span>`}
-    </a>`).join("");
+  const onPath = new Set();
+  for (let p = state.orgs.find((o) => o.id === r.org); p; p = state.orgs.find((x) => x.id === p.parent)) onPath.add(p.id);
+  const isOpen = (o, d) => (o.id in treePref ? treePref[o.id] : d === 0 || onPath.has(o.id));
+  const node = (o, d) => {
+    const kids = kidsOf(o.id), open = kids.length > 0 && isOpen(o, d), tag = entityTag(o);
+    return `<div class="tnode">
+      <div class="org ${o.hasData ? "has-data" : ""} ${o.access ? "" : "locked"} ${o.id === r.org ? "active" : ""}" style="--d:${d}">
+        ${kids.length ? `<button class="tw ${open ? "open" : ""}" data-t="${o.id}" aria-expanded="${open}" aria-label="${open ? "Collapse" : "Expand"} ${esc(o.name)}"><svg viewBox="0 0 10 10"><path d="M3 1.5 7 5 3 8.5"/></svg></button>` : `<span class="tw-sp"></span>`}
+        <a class="oname" ${o.access ? `href="#/${o.id}/overview"` : `title="Shown for context — no access granted"`}><span class="dot"></span><span class="nm">${esc(o.name)}</span></a>
+        ${tag ? `<span class="otag" title="A partner with members of its own">${tag}</span>` : ""}
+        ${kids.length && !open ? `<span class="ocnt" title="${subtreeSize(o.id)} nested ${subtreeSize(o.id) === 1 ? "organization" : "organizations"}">${subtreeSize(o.id)}</span>` : ""}
+        ${o.access ? "" : `<span class="kind">🔒</span>`}
+      </div>
+      ${open ? `<div class="tkids" style="--d:${d}">${kids.map((k) => node(k, d + 1)).join("")}</div>` : ""}
+    </div>`;
+  };
+  $("#orgTree").innerHTML = kidsOf(null).map((o) => node(o, 0)).join("");
+  $("#orgTree").querySelectorAll(".tw").forEach((b) => (b.onclick = (ev) => {
+    ev.preventDefault();
+    treePref[b.dataset.t] = b.getAttribute("aria-expanded") !== "true";
+    saveTree(); renderSide(r);
+  }));
   document.querySelectorAll("#nav a[data-view]").forEach((a) => {
     a.classList.toggle("active", a.dataset.view === r.view);
     a.href = `#/${r.org}/${a.dataset.view}`;
   });
 }
 
-function crumbs(parts) { $("#crumbs").innerHTML = parts.map((p, i) => (i === parts.length - 1 ? `<b>${esc(p)}</b>` : esc(p))).join(" <span>/</span> "); }
+// parts: plain labels, or {label, href} for a level you can open
+function crumbs(parts) {
+  $("#crumbs").innerHTML = parts.map((p, i) => {
+    const label = typeof p === "string" ? p : p.label;
+    return i === parts.length - 1 ? `<b>${esc(label)}</b>` : p.href ? `<a href="${p.href}">${esc(label)}</a>` : esc(label);
+  }).join(" <span>/</span> ");
+}
 
 async function render() {
   hideTip();
@@ -209,7 +242,7 @@ async function render() {
   renderSide(r);
   $("#side").classList.remove("open");
   const org = state.orgs.find((o) => o.id === r.org);
-  const trail = []; let p = org; while (p) { trail.unshift(p.name); p = state.orgs.find((x) => x.id === p.parent); }
+  const trail = []; let p = org; while (p) { trail.unshift(p.access ? { label: p.name, href: `#/${p.id}/overview` } : p.name); p = state.orgs.find((x) => x.id === p.parent); }
   const viewName = { overview: "Overview", events: "Events", investors: "Investors" }[r.view] || "Overview";
   crumbs([...trail, viewName]);
   const view = $("#view");
@@ -240,6 +273,28 @@ function renderNoData(view, org) {
 }
 
 // ---------- overview ----------
+// where this organization sits: its kind, and the levels above it
+function levelLine(id) {
+  const o = state.orgs.find((x) => x.id === id) || {};
+  const up = []; for (let p = state.orgs.find((x) => x.id === o.parent); p; p = state.orgs.find((x) => x.id === p.parent)) up.unshift(p);
+  const kind = entityTag(o) ? (entityTag(o) === "Trust" ? "Trust" : "LLC") + " partner" : o.kind || "";
+  return `<div class="level"><span class="lvl-kind">${esc(kind)}</span>${up.length ? `<span class="lvl-path">within ${up.map((p) => p.access ? `<a href="#/${p.id}/overview">${esc(p.name)}</a>` : esc(p.name)).join(" › ")}</span>` : `<span class="lvl-path">top level</span>`}</div>`;
+}
+// the partnerships nested directly under this one, with the share each holds here
+function subCards(id, owners) {
+  const kids = kidsOf(id);
+  if (!kids.length) return "";
+  return `<div class="card subs"><div class="card-h"><h2>Sub-partnerships</h2><span class="muted">${kids.length} nested directly under this ${entityTag(state.orgs.find((o) => o.id === id) || {}) ? "entity" : "partnership"}</span></div>
+    <div class="sub-grid">${kids.map((k) => {
+      const own = k.entityOf ? owners.find((x) => x.name === k.entityOf.member) : null;
+      const below = subtreeSize(k.id);
+      return `<a class="sub-card" ${k.access ? `href="#/${k.id}/overview"` : ""}>
+        <div class="sc-top">${entityTag(k) ? `<span class="otag light">${entityTag(k)}</span>` : `<span class="otag light">${esc(k.kind)}</span>`}${below ? `<span class="muted">${below} more nested below</span>` : ""}</div>
+        <div class="sc-name">${esc(k.name)}</div>
+        <div class="sc-meta">${own ? `${fmt(own.pct, "pct")} of this partnership · ${fmt(own.shares, "num")} shares` : k.hasData ? "Ledger active" : "No events yet"}</div></a>`;
+    }).join("")}</div></div>`;
+}
+
 async function renderOverview(view, r) {
   const s = await api(`orgs/${r.org}/summary`);
   if (!s.asOfEventId) {
@@ -277,10 +332,12 @@ async function renderOverview(view, r) {
       <div class="card-b own">${ownershipBars(s.owners)}</div></div>`;
 
   view.innerHTML = `
-    <h1>${inv ? "Welcome back, " + esc(shortName(s.me.name).split(" ")[0]) : "Partnership overview"}</h1>
+    <h1>${inv ? "Welcome back, " + esc(shortName(s.me.name).split(" ")[0]) : esc(state.orgs.find((o) => o.id === r.org)?.name || "Partnership overview")}</h1>
+    ${inv ? "" : levelLine(r.org)}
  ${s.stakeIn ? `<p class="stake">Partner in <a href="#/${s.stakeIn.org}/overview">${esc(s.stakeIn.orgName)}</a>: ${fmt(s.stakeIn.shares, "num")} shares · ${fmt(s.stakeIn.investment, "usd0")} capital · ${fmt(s.stakeIn.pct, "pct")} of the partnership, as of ${esc(fmtIso(s.stakeIn.asOf))}. Its members' split is recorded here.</p>` : ""}
     <p class="sub">${inv ? "Your position in " + esc(state.orgs.find((o) => o.id === r.org)?.name || "this partnership") : `${s.eventsRecorded} events recorded · latest: <a href="#/${r.org}/events/${s.asOfEventId}" style="color:var(--accent-ink)">${esc(s.asOfTitle)}</a>`}</p>
     <div class="kpis">${tiles}</div>
+    ${inv ? "" : subCards(r.org, s.owners || [])}
     <div class="grid-2">
       <div class="card"><div class="card-h"><h2>${inv ? "Your annual distributions" : "Annual distributions"}</h2><span class="muted">click a bar to open the report</span></div>
         <div class="card-b"><div id="distChart"></div></div></div>
@@ -707,6 +764,11 @@ async function drawReport(r) {
       <div class="btns"><button class="btn" id="disc">Delete scenario</button></div>
       <div class="login-err" id="draftErr" role="alert"></div></div>` : ""}
     ${e.scoped ? `<div class="lock-note" style="margin:8px 22px 0"><svg viewBox="0 0 20 20"><path d="M10 1l7 3v5c0 4.4-3 8.4-7 10-4-1.6-7-5.6-7-10V4z"/></svg>Showing your line and partnership totals only. Other members' positions are not sent to your browser.</div>` : ""}
+    ${e.fromEvent ? `<div class="flow-from">${esc(state.orgs.find((o) => o.id === r.org)?.name || "")}'s share of <a href="#/${e.fromEvent.org}/events/${e.fromEvent.id}">${esc(e.fromEvent.orgName)}'s ${esc((e.date || "").slice(0, 4))} distribution</a>, split among its members.</div>` : ""}
+    ${e.flowsTo && e.flowsTo.length ? `<div class="flow"><h3>Where the cash went</h3>
+      <div class="fl-row top"><b>${esc(state.orgs.find((o) => o.id === r.org)?.name || "")}</b><span>${fmt(e.totals.ds, "usd")}</span><em>to ${e.rows.filter((x) => x.values.ds).length} partners</em></div>
+      ${e.flowsTo.map((x) => `<div class="fl-row" style="padding-left:${x.depth * 22}px"><span class="tw">└</span><a href="#/${x.org}/events/${x.eventId}">${esc(x.orgName)}</a><span>${fmt(x.amount, "usd")}</span><em>to ${x.members} members</em></div>`).join("")}
+      <div class="hint">Each LLC and trust records the same distribution in its own books, split by its members' ratios. Every level adds up to the cent.</div></div>` : ""}
     <div class="rep-kpis">${kp.map(([l, v]) => `<div><div class="l">${esc(l)}</div><div class="v">${v}</div></div>`).join("")}</div>
     ${ch.length ? `<div class="changes"><h3>What changed</h3><ul id="chl">${ch.slice(0, 6).map((x) => `<li><b>${esc(shortName(x.name))}</b> — ${esc(x.note)}</li>`).join("")}</ul>${ch.length > 6 ? `<span class="more" id="chm">Show all ${ch.length} changes</span>` : ""}</div>` : ""}
     <div class="rep-tools">
