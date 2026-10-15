@@ -311,8 +311,9 @@ function barChart(el, data, onClick) {
   data.forEach((d, i) => {
     const x = m.l + i * bw + gap / 2, w = bw - gap, h = Math.max(0, ih - (y(d.y || 0) - m.t)), yy = y(d.y || 0);
     const r = Math.min(4, w / 2, h);
-    s += `<rect class="hit" data-i="${i}" x="${m.l + i * bw}" y="${m.t}" width="${bw}" height="${ih}"/>`;
-    s += `<path class="bar" d="M${x},${yy + h} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + w - r} Q${x + w},${yy} ${x + w},${yy + r} V${yy + h} Z"/>`;
+    // the full-height hit area sits on top of the bar so the whole column (bar included) responds
+    s += `<g class="col"><path class="bar" d="M${x},${yy + h} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + w - r} Q${x + w},${yy} ${x + w},${yy + r} V${yy + h} Z"/>`;
+    s += `<rect class="hit" data-i="${i}" x="${m.l + i * bw}" y="${m.t}" width="${bw}" height="${ih}"/></g>`;
     const every = Math.ceil(data.length / 12);
     if ((i % every === 0 && lastI - i >= every) || i === lastI) s += `<text class="axis" x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${esc(d.x)}</text>`;
     if (i === lastI) s += `<text class="lbl" x="${x + w / 2}" y="${yy - 6}" text-anchor="middle">${usdShort(d.y || 0)}</text>`;
