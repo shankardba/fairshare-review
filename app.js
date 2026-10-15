@@ -123,7 +123,9 @@ function fmtIso(d) {
 const slug = (t) => String(t).toLowerCase().replace(/[^a-z]+/g, "-").replace(/-+$/, "");
 const chip = (type, status) => `<span class="chip t-${slug(type)} ${status === "Scenario" ? "s-scenario" : ""}"><i></i>${esc(type)}</span>`;
 const initials = (n) => n.replace(/\(.*?\)/g, "").split(",").reverse().map((p) => p.trim()[0] || "").join("").slice(0, 2).toUpperCase();
-const shortName = (n) => { const [last, first] = n.split(","); return first ? `${first.trim().replace(/\s+(M\.D\.|D\.O\.).*$/, "")} ${last.trim()}`.replace(/,$/, "") : n; };
+// "Becker, Paul L., M.D." -> "Paul L. Becker"; company names ("Summit Group, LLC") stay as written
+const ENTITY_SUFFIX = /,\s*(LLC|L\.L\.C\.|LP|LLP|Inc\.?|Ltd\.?|Co\.?|PLLC|PC|P\.C\.|Trust)\s*$/i;
+const shortName = (n) => { if (ENTITY_SUFFIX.test(n)) return n; const [last, first] = n.split(","); return first ? `${first.trim().replace(/\s+(M\.D\.|D\.O\.).*$/, "")} ${last.trim()}`.replace(/,$/, "") : n; };
 
 // ---------- tooltip ----------
 const tip = $("#tip");
@@ -247,6 +249,9 @@ async function renderOverview(view, r) {
     return;
   }
   const inv = state.user.role === "investor";
+  // an LLC or trust has no distributions of its own: it receives them from the partnership above
+  const via = s.stakeIn && !s.distributions.length ? s.stakeIn : null;
+  if (via) s.distributions = via.distributions;
   const last = s.distributions[s.distributions.length - 1] || {};
   const tiles = inv ? `
       <div class="card kpi hero"><div class="l">Your shares</div><div class="v">${fmt(s.me.shares, "num")}</div><div class="s">${fmt(s.me.pct, "pct")} of the partnership</div></div>
@@ -254,11 +259,14 @@ async function renderOverview(view, r) {
       <div class="card kpi"><div class="l">Lifetime distributions</div><div class="v">${fmt(s.me.lifetime, "usd0")}</div><div class="s">${s.distributions.filter((d) => d.mine).length} years paid</div></div>
       <div class="card kpi"><div class="l">${last.year || ""} distribution</div><div class="v">${fmt(last.mine, "usd0")}</div><div class="s">Partnership ROI ${fmt(last.roi, "pct")}</div></div>`
     : `
-      <div class="card kpi hero"><div class="l">Committed capital</div><div class="v">${fmt(s.capital, "usd0")}</div><div class="s">held constant across every admission &amp; exit</div></div>
+      <div class="card kpi hero"><div class="l">${via ? "Members' contributions" : "Committed capital"}</div><div class="v">${fmt(s.capital, "usd0")}</div><div class="s">${via ? "the ratios that split what it receives" : "held constant across every admission &amp; exit"}</div></div>
       <div class="card kpi"><div class="l">Shares outstanding</div><div class="v">${fmt(s.shares, "num")}</div><div class="s">$10,000 par</div></div>
       <div class="card kpi"><div class="l">Active members</div><div class="v">${s.activeMembers}</div><div class="s">as of ${esc(fmtSheetDate(s.asOf))}</div></div>
+      ${via ? `
+      <div class="card kpi"><div class="l">${last.year || ""} received</div><div class="v">${fmt(last.amount, "usd0")}</div><div class="s">from ${esc(via.orgName)}</div></div>
+      <div class="card kpi"><div class="l">Received since ${s.distributions[0]?.year || ""}</div><div class="v">${fmt(s.distributions.reduce((a, d) => a + d.amount, 0), "usd0")}</div><div class="s">passed through to its members</div></div>` : `
       <div class="card kpi"><div class="l">${last.year || ""} distribution</div><div class="v">${fmt(last.amount, "usd0")}</div><div class="s">ROI ${fmt(last.roi, "pct")} · ${fmt(last.perShareMonth, "usd")}/share-month</div></div>
-      <div class="card kpi"><div class="l">Distributed since ${s.distributions[0]?.year || ""}</div><div class="v">${fmt(s.lifetimeDistributed, "usd0")}</div><div class="s">${s.distributions.length} annual distributions</div></div>`;
+      <div class="card kpi"><div class="l">Distributed since ${s.distributions[0]?.year || ""}</div><div class="v">${fmt(s.lifetimeDistributed, "usd0")}</div><div class="s">${s.distributions.length} annual distributions</div></div>`}`;
 
   const right = inv ? `
     <div class="card"><div class="card-h"><h2>Your recent events</h2></div><div class="card-b list">
@@ -270,6 +278,7 @@ async function renderOverview(view, r) {
 
   view.innerHTML = `
     <h1>${inv ? "Welcome back, " + esc(shortName(s.me.name).split(" ")[0]) : "Partnership overview"}</h1>
+ ${s.stakeIn ? `<p class="stake">Partner in <a href="#/${s.stakeIn.org}/overview">${esc(s.stakeIn.orgName)}</a>: ${fmt(s.stakeIn.shares, "num")} shares · ${fmt(s.stakeIn.investment, "usd0")} capital · ${fmt(s.stakeIn.pct, "pct")} of the partnership, as of ${esc(fmtIso(s.stakeIn.asOf))}. Its members' split is recorded here.</p>` : ""}
     <p class="sub">${inv ? "Your position in " + esc(state.orgs.find((o) => o.id === r.org)?.name || "this partnership") : `${s.eventsRecorded} events recorded · latest: <a href="#/${r.org}/events/${s.asOfEventId}" style="color:var(--accent-ink)">${esc(s.asOfTitle)}</a>`}</p>
     <div class="kpis">${tiles}</div>
     <div class="grid-2">
@@ -283,8 +292,9 @@ async function renderOverview(view, r) {
 
   barChart($("#distChart"), s.distributions.map((d) => ({
     x: String(d.year), y: inv ? d.mine : d.amount, id: d.eventId,
-    tip: `<b>${d.year} distribution</b>${inv ? `Your share: ${fmt(d.mine, "usd0")}<br>` : ""}Partnership: ${fmt(d.amount, "usd0")}<br>ROI ${fmt(d.roi, "pct")}`,
-  })), (d) => go(r.org, "events", d.id));
+    tip: via ? `<b>${d.year}</b>Received from ${esc(via.orgName)}: ${fmt(d.amount, "usd0")}`
+             : `<b>${d.year} distribution</b>${inv ? `Your share: ${fmt(d.mine, "usd0")}<br>` : ""}Partnership: ${fmt(d.amount, "usd0")}<br>ROI ${fmt(d.roi, "pct")}`,
+  })), (d) => go(via ? via.org : r.org, "events", d.id));
 }
 
 function ownershipBars(owners) {
@@ -327,6 +337,19 @@ function barChart(el, data, onClick) {
   });
 }
 function niceStep(raw) { const p = 10 ** Math.floor(Math.log10(raw || 1)); const f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+
+// ---------- nested partners ----------
+// members behind an LLC/trust partner arrive flattened in tree order; each knows its fraction of the
+// top-level partner and who holds it directly ("via")
+function nestInfo(top, members) {
+  const frac = Object.fromEntries(members.map((m) => [m.key || m.memberId, m.fraction]));
+  const name = Object.fromEntries(members.map((m) => [m.key || m.memberId, m.name]));
+  return members.map((m) => {
+    const parentFrac = m.via && m.via !== top.key && m.via !== top.memberId ? frac[m.via] : 1;
+    return { ...m, ofParent: parentFrac ? m.fraction / parentFrac : 0, parentName: m.via && name[m.via] ? name[m.via] : top.name, gone: !m.fraction };
+  });
+}
+const peopleCount = (members) => members.filter((m) => !(m.entity ?? m.isEntity) && m.fraction > 0).length;
 
 // ---------- events ----------
 const TYPES = ["All", "Distribution", "Admission", "Retirement", "Capital Call", "Scenario"];
@@ -640,7 +663,13 @@ async function drawReport(r) {
     const cls = typeof v === "number" ? (v < 0 ? "neg" : v === 0 ? "zero" : "") : "";
     return `<td class="${cls}">${v === 0 ? "—" : esc(fmt(v, col.fmt))}</td>`;
   };
-  const body = rows.map((row, i) => `<tr class="${isExited(row) ? "exited" : ""}"><td class="l sticky"><span class="idx">${i + 1}</span>${esc(row.name)}</td>${cols.map((col) => td(col, row.values[col.id])).join("")}</tr>`).join("");
+  const open = state.expanded || (state.expanded = {});
+  const subRows = (row) => !row.members || !open[row.key] ? "" : nestInfo(row, row.members)
+    .filter((m) => !(f.hideExited && m.gone))
+    .map((m) => `<tr class="sub ${m.gone ? "exited" : ""}"><td class="l sticky"><span class="idx"></span><span class="nest" style="padding-left:${(m.depth - 1) * 16}px">↳ ${esc(m.name)}</span>
+      <span class="of">${m.gone ? "left" : `${fmt(m.ofParent, "pct")} of ${esc(shortName(m.parentName))}`}</span></td>${cols.map((col) => td(col, m.values[col.id])).join("")}</tr>`).join("");
+  const body = rows.map((row, i) => `<tr class="${isExited(row) ? "exited" : ""}${row.members ? " has-sub" : ""}"><td class="l sticky"><span class="idx">${i + 1}</span>${esc(row.name)}${row.members ? `
+      <button class="lt" data-k="${esc(row.key)}" aria-expanded="${!!open[row.key]}">${open[row.key] ? "▾" : "▸"} ${peopleCount(row.members)} people</button>` : ""}</td>${cols.map((col) => td(col, row.values[col.id])).join("")}</tr>${subRows(row)}`).join("");
   const foot = Object.keys(e.totals).length ? `<tfoot><tr><td class="l sticky">Total</td>${cols.map((col) => (col.fmt === "text" || col.fmt === "date" ? "<td></td>" : td(col, e.totals[col.id]))).join("")}</tr></tfoot>` : "";
 
   const k = e.kpis;
@@ -691,6 +720,7 @@ async function drawReport(r) {
       ${e.notes.map((n) => `<div>${esc(n)}</div>`).join("")}</div>` : ""}`;
 
   $("#stmts").onclick = () => { state.stmt = e.id; drawReport(r); };
+  $("#report").querySelectorAll(".lt").forEach((b) => (b.onclick = () => { open[b.dataset.k] = !open[b.dataset.k]; drawReport(r); }));
   const fin = $("#fin");
   if (fin) fin.onclick = async () => {
     if (!fin.dataset.armed) { fin.dataset.armed = 1; fin.textContent = "Confirm — this becomes permanent"; return; }
@@ -730,6 +760,7 @@ function drawOrgForm(view, org, error) {
     <form class="card ev-form org-form" id="orgForm">
       <div class="rep-meta"><span class="chip"><i></i>${org ? "Initial capitalization" : "New organization"}</span><span>Nothing is recorded as final until you review and finalize.</span></div>
       <h1>${org ? esc(org.name) : "Create an organization"}</h1>
+      ${org && org.entityOf ? `<p class="hint">${esc(org.name)} is a partner in ${esc(state.orgs.find((o) => o.id === org.entityOf.org)?.name || "")}. Enter what each member put into it. Their ratios decide how its distributions, payouts and share-months pass through to them.</p>` : ""}
       ${org ? "" : `
         <label class="fl" for="oName">Organization name</label>
         <input class="fi" id="oName" required maxlength="120" placeholder="e.g. Riverside Building Partners, LLC" value="${esc(f.name)}">
@@ -814,7 +845,9 @@ function drawOrgForm(view, org, error) {
 function drawStatements(e, r) {
   const org = state.orgs.find((o) => o.id === r.org);
   const has = (id) => e.columns.some((c) => c.id === id);
-  const rows = e.rows.filter((row) => ["ps", "qs", "as", "ds"].some((id) => row.values[id]));
+  const rows = e.rows.flatMap((row) => [row, ...(row.members ? nestInfo(row, row.members)
+      .filter((m) => !m.entity && !m.gone).map((m) => ({ ...m, through: row.name })) : [])])
+    .filter((row) => ["ps", "qs", "as", "ds"].some((id) => row.values[id]));
   const line = (label, value, strong) => (value === null || value === undefined || value === "" ? "" :
     `<tr class="${strong ? "strong" : ""}"><td>${label}</td><td>${value}</td></tr>`);
   const one = (row) => {
@@ -826,6 +859,7 @@ function drawStatements(e, r) {
       <header><div class="brandline">Fair<b>Share</b></div><div class="stmt-org">${esc(org ? org.name : "")}</div></header>
       <h2>Statement of account</h2>
       <div class="stmt-who">${esc(row.name)}</div>
+      ${row.through ? `<div class="stmt-ev">Held through ${esc(row.through)}: ${fmt(row.fraction, "pct")} of its position${row.parentName !== row.through ? `, as ${fmt(row.ofParent, "pct")} of ${esc(row.parentName)}` : ""}</div>` : ""}
       <div class="stmt-ev">${esc(e.title)} · effective ${esc(fmtIso(e.date))}${e.status !== "Final" ? ` · <b>${esc(e.status.toUpperCase())} — not final</b>` : ""}</div>
       <table>
         ${has("ps") ? line("Shares before", fmt(pre, "num")) + line("Capital account before", fmt(v.pi ?? pre * par, "usd")) : ""}
@@ -868,15 +902,20 @@ async function renderInvestors(view, r) {
     <div class="card" style="margin-top:18px; overflow:auto">
       <table class="plain"><thead><tr><th>Member</th><th>Invested since</th><th>Status</th><th class="r">Shares</th><th class="r">Capital account</th><th class="r">Lifetime distributions</th><th class="r">Events</th></tr></thead>
       <tbody>${list.map((x) => `<tr class="click" data-k="${esc(x.key)}">
-        <td><span class="avatar">${esc(initials(x.name))}</span>${esc(x.name)}</td>
+        <td><span class="avatar">${esc(initials(x.name))}</span>${esc(x.name)}${x.entityOrg ? ` <a class="lt" href="#/${x.entityOrg}/overview" onclick="event.stopPropagation()">${peopleCount(x.members || [])} people ›</a>` : ""}</td>
         <td>${esc(x.since ? fmtSheetDate(x.since) : "—")}</td>
         <td><span class="pill ${x.status.toLowerCase()}">${x.status}</span></td>
         <td class="r">${x.shares ? fmt(x.shares, "num") : "—"}</td>
         <td class="r">${x.investment ? fmt(x.investment, "usd0") : "—"}</td>
         <td class="r">${fmt(x.lifetime, "usd0")}</td>
-        <td class="r">${x.events}</td></tr>`).join("")}</tbody></table>
+        <td class="r">${x.events}</td></tr>${x.members ? nestInfo(x, x.members).map((m) => `<tr class="sub ${m.gone ? "exited" : ""}">
+        <td><span class="nest" style="padding-left:${(m.depth - 1) * 16 + 34}px">↳ ${esc(m.name)}</span> <span class="of">${m.gone ? "left" : `${fmt(m.ofParent, "pct")} of ${esc(shortName(m.parentName))}`}</span></td>
+        <td>—</td><td><span class="pill ${m.gone ? "exited" : "active"}">${m.gone ? "Exited" : "Active"}</span></td>
+        <td class="r">${m.shares ? fmt(m.shares, "num") : "—"}</td><td class="r">${m.investment ? fmt(m.investment, "usd0") : "—"}</td>
+        <td class="r">${fmt(m.lifetime, "usd0")}</td><td class="r muted" title="Share-months to date">${m.shareMonths != null ? fmt(m.shareMonths, "num") + " sm" : ""}</td></tr>`).join("") : ""}`).join("")}</tbody></table>
     </div>`;
   view.querySelectorAll("tr[data-k]").forEach((tr) => (tr.onclick = () => go(r.org, "investors", tr.dataset.k)));
+  state.invList = list;
   if (r.id) openInvestor(r, r.id);
 }
 
@@ -894,6 +933,19 @@ async function openInvestor(r, key) {
     <div class="hist">${d.history.filter((h, i, a) => i === 0 || h.note || Math.abs(h.shares - a[i - 1].shares) > 0.005).reverse().map((h) => `
       <div class="h"><a href="#/${r.org}/events/${h.eventId}"><b>${fmt(h.shares, "num")} shares</b> — ${esc(h.title)}</a>
       <div class="d">${fmtIso(h.date)}${h.note ? " · " + esc(h.note) : ""}</div></div>`).join("")}</div>`;
+  const entry = (state.invList || []).find((x) => x.key === key) || {};
+  if (entry.entityOrg) dr.querySelector(".sub").insertAdjacentHTML("afterend",
+    `<p><a class="btn" href="#/${entry.entityOrg}/overview">Open ${esc(shortName(d.name))}'s members ›</a></p>`);
+  else if (state.user.superuser && !STATIC && entry.status === "Active") {
+    dr.querySelector(".sub").insertAdjacentHTML("afterend", `<p><button class="btn" id="mkEntity">This partner is an LLC or trust: record its members</button></p>
+      <div class="login-err" id="entErr" role="alert"></div>`);
+    dr.querySelector("#mkEntity").onclick = async () => {
+      try {
+        const out = await post(`orgs/${r.org}/investors/${encodeURIComponent(key)}/entity`);
+        state.orgs = await api("orgs"); state.capForm = null; close(); location.hash = `#/${out.id}/capitalize`;
+      } catch (err) { dr.querySelector("#entErr").textContent = err.message; }
+    };
+  }
   dr.querySelector(".x").onclick = close;
   document.body.append(bg, dr);
   barChart($("#invChart"), d.distributions.map((x) => ({ x: String(x.year), y: x.amount, tip: `<b>${x.year}</b>${fmt(x.amount, "usd0")}` })));

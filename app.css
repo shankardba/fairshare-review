@@ -466,3 +466,11 @@ table.plain .r { text-align: right; }
 .roster td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; padding-left: 8px; color: var(--ink-2); }
 @media (max-width: 980px) { .ev-new { grid-template-columns: minmax(0, 1fr); } .roster { position: static; max-height: none; } }
 @media print { .roster { display: none; } }
+
+/* nested partners (LLC / trust members) */
+.lt { margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--accent-ink); background: var(--accent-soft); border: 0; border-radius: 999px; padding: 2px 8px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+tr.sub td { background: var(--surface-2); font-size: 12px; color: var(--ink-2); }
+tr.sub .nest { white-space: nowrap; }
+tr.sub .of { font-size: 11px; color: var(--ink-3); margin-left: 6px; white-space: nowrap; }
+.stake { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+.stake a { color: var(--accent-ink); font-weight: 600; }
