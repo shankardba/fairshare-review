@@ -19,7 +19,7 @@ const state = { persona: store.get("fs.persona", "me"), user: null, orgs: [], ev
 // generated ahead of time and encrypted; the password unlocks it in this browser.
 const STATIC = window.FS_STATIC || null;
 // the review snapshot has no sign-up: point to the landing-page preview instead
-if (STATIC) { const lf = document.querySelector(".login-foot"); if (lf) lf.innerHTML = '<a href="landing.html">About FairShare</a>'; }
+if (STATIC) { const lf = document.querySelector(".login-foot"); if (lf) lf.innerHTML = '<a href="./">About FairShare</a>'; }
 let bundle = null;
 
 async function api(path) {
