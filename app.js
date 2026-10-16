@@ -234,6 +234,9 @@ function crumbs(parts) {
 async function render() {
   hideTip();
   const r = route();
+  // the full-screen report belongs to the Events page only
+  if (r.view !== "events" || r.id === "new") state.expanded_report = false;
+  if (!state.expanded_report) document.body.classList.remove("report-open");
   if (state.stmt && state.stmt !== r.id) state.stmt = null;
   if (r.org === "new-org") {
     if (STATIC || !(state.user.superuser || state.user.canCreate)) return go((state.orgs.find((o) => o.access) || {}).id, "overview");
@@ -842,6 +845,8 @@ async function drawReport(r) {
         <h1>${esc(e.title)}</h1>
       </div>
       <div class="btns">
+        ${state.expanded_report ? `<button class="btn x-close" id="unexpand" aria-label="Close the expanded view" title="Close (Esc)">×</button>`
+          : `<button class="btn" id="expand" title="Open the numbers full-screen"><svg viewBox="0 0 20 20"><path d="M3 3h6v2H5v4H3zm8 0h6v6h-2V5h-4zM3 11h2v4h4v2H3zm12 0h2v6h-6v-2h4z"/></svg>Expand</button>`}
         <button class="btn" id="stmts"><svg viewBox="0 0 20 20"><path d="M5 2h8l3 3v13H5zm2 6v2h7V8zm0 4v2h7v-2z"/></svg>Statements</button>
         <button class="btn" id="csv"><svg viewBox="0 0 20 20"><path d="M9 3h2v8l3-3 1.4 1.4L10 14.8 4.6 9.4 6 8l3 3zM4 16h12v2H4z"/></svg>CSV</button>
         <button class="btn" onclick="print()"><svg viewBox="0 0 20 20"><path d="M5 2h10v4H5zm-2 5h14a1 1 0 0 1 1 1v6h-3v4H5v-4H2V8a1 1 0 0 1 1-1zm4 7v2h6v-2z"/></svg>PDF</button>
@@ -878,6 +883,18 @@ async function drawReport(r) {
       ${e.notes.map((n) => `<div>${esc(n)}</div>`).join("")}</div>` : ""}`;
 
   $("#stmts").onclick = () => { state.stmt = e.id; drawReport(r); };
+  // full-screen view of the numbers; × or Esc returns to the normal layout
+  const setExpanded = (on) => {
+    state.expanded_report = on;
+    $("#report").classList.toggle("expanded", on);
+    document.body.classList.toggle("report-open", on);
+    drawReport(r);
+  };
+  $("#report").classList.toggle("expanded", !!state.expanded_report);
+  document.body.classList.toggle("report-open", !!state.expanded_report);
+  const ex = $("#expand"); if (ex) ex.onclick = () => setExpanded(true);
+  const ux = $("#unexpand"); if (ux) { ux.onclick = () => setExpanded(false); ux.focus(); }
+  document.onkeydown = (ev) => { if (ev.key === "Escape" && state.expanded_report && $("#report")) setExpanded(false); };
   $("#report").querySelectorAll(".lt").forEach((b) => (b.onclick = () => { open[b.dataset.k] = !open[b.dataset.k]; drawReport(r); }));
   const fin = $("#fin");
   if (fin) fin.onclick = async () => {
