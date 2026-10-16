@@ -247,11 +247,12 @@ async function render() {
   $("#side").classList.remove("open");
   const org = state.orgs.find((o) => o.id === r.org);
   const trail = []; let p = org; while (p) { trail.unshift(p.access ? { label: p.name, href: `#/${p.id}/overview` } : p.name); p = state.orgs.find((x) => x.id === p.parent); }
-  const viewName = { overview: "Overview", events: "Events", investors: "Investors" }[r.view] || "Overview";
+  const viewName = { overview: "Overview", events: "Events", investors: "Investors", chart: "Org chart" }[r.view] || "Overview";
   crumbs([...trail, viewName]);
   const view = $("#view");
   try {
     if (r.view === "capitalize" && org.canFound && !STATIC) { crumbs([...trail, "Initial capitalization"]); return drawOrgForm(view, org); }
+    if (r.view === "chart") return await renderChart(view, r);
     if (!org.hasData) return renderNoData(view, org);
     if (r.view === "events") return await renderEvents(view, r);
     if (r.view === "investors") return await renderInvestors(view, r);
@@ -274,6 +275,91 @@ function renderNoData(view, org) {
       <p><b>No events recorded${kids.length ? " at this level" : ""}.</b><br>${kids.length ? "Ownership is tracked in the sub-organizations above." : "Record the initial capitalization to begin."}</p>
       ${!kids.length && org.canFound && !STATIC ? `<a class="btn primary" href="#/${org.id}/capitalize">Enter the starting positions</a>` : ""}
     </div>`;
+}
+
+// ---------- org chart: every organization this user can see, as one diagram ----------
+async function renderChart(view, r) {
+  // only the selected organization's family: climb to the highest level above it this user may open,
+  // then draw that branch (organizations the user can't open are left out)
+  let top = state.orgs.find((o) => o.id === r.org);
+  for (let p = state.orgs.find((x) => x.id === top.parent); p && p.access; p = state.orgs.find((x) => x.id === p.parent)) top = p;
+  const inBranch = new Set();
+  const collect = (o) => { if (!o.access) return; inBranch.add(o.id); state.orgs.filter((k) => k.parent === o.id).forEach(collect); };
+  collect(top);
+  const orgs = state.orgs.filter((o) => inBranch.has(o.id));
+  const kidsOf = (id) => orgs.filter((o) => o.parent === id);
+  const sums = {};
+  await Promise.all(orgs.filter((o) => o.access && o.hasData).map(async (o) => {
+    try { sums[o.id] = await api(`orgs/${o.id}/summary`); } catch { /* shown without figures */ }
+  }));
+  const NW = 232, NH = 104, GX = 26, GY = 58, PAD = 24;
+  const width = {};
+  const measure = (o) => {
+    const k = kidsOf(o.id);
+    width[o.id] = k.length ? Math.max(NW, k.reduce((a, c) => a + measure(c), 0) + GX * (k.length - 1)) : NW;
+    return width[o.id];
+  };
+  const roots = [top];
+  roots.forEach(measure);
+  // each top-level group gets its own band, stacked down the page, so the chart stays narrow
+  const pos = {};
+  let depthMax = 0;
+  const place = (o, x0, y0, d) => {
+    pos[o.id] = { x: x0 + width[o.id] / 2 - NW / 2, y: y0 + d * (NH + GY) };
+    depthMax = Math.max(depthMax, d);
+    let x = x0;
+    kidsOf(o.id).forEach((k) => { place(k, x, y0, d + 1); x += width[k.id] + GX; });
+  };
+  let y = 0;
+  roots.forEach((o) => { depthMax = 0; place(o, 0, y, 0); y += (depthMax + 1) * (NH + GY) + GY * 0.4; });
+  const W = Math.max(NW, ...roots.map((o) => width[o.id])) + PAD * 2, H = y - GY * 1.4 + PAD * 2;
+
+  const kind = (o) => entityTag(o) ? (entityTag(o) === "Trust" ? "Trust" : "LLC partner") : o.kind || "";
+  const meta = (o) => {
+    const s = sums[o.id];
+    if (!o.access) return "Shown for context";
+    if (!s || !s.asOfEventId) {
+      const n = kidsOf(o.id).length;
+      return n ? `Holds ${n} ${n === 1 ? "organization" : "organizations"}` : "No records yet";
+    }
+    return `${s.activeMembers ?? "—"} ${s.activeMembers === 1 ? "member" : "members"} · ${fmt(s.capital, "usd0")}`;
+  };
+  const lines = orgs.filter((o) => o.parent && pos[o.parent] && pos[o.id]).map((o) => {
+    const p = pos[o.parent], c = pos[o.id];
+    const x1 = PAD + p.x + NW / 2, y1 = PAD + p.y + NH, x2 = PAD + c.x + NW / 2, y2 = PAD + c.y, ym = y1 + GY / 2;
+    return `<path d="M${x1} ${y1} V${ym} H${x2} V${y2}"/>`;
+  }).join("");
+  const nodes = orgs.filter((o) => pos[o.id]).map((o) => {
+    const p = pos[o.id], tag = entityTag(o);
+    return `<a class="oc-node ${o.access ? "" : "locked"} ${o.id === r.org ? "here" : ""} ${tag ? "ent" : ""}" style="left:${PAD + p.x}px;top:${PAD + p.y}px;width:${NW}px;height:${NH}px"
+      ${o.access ? `href="#/${o.id}/overview"` : ""} title="${esc(o.name)}">
+      <span class="oc-kind">${esc(kind(o))}${sums[o.id]?.stakeIn ? ` · ${fmt(sums[o.id].stakeIn.pct, "pct")} of parent` : ""}${o.access ? "" : " · 🔒"}</span>
+      <span class="oc-name">${esc(o.name)}</span>
+      <span class="oc-meta">${meta(o)}</span></a>`;
+  }).join("");
+  const count = orgs.length;
+  view.innerHTML = `
+    <h1>Organization chart</h1>
+    <p class="sub">${esc(top.name)}${count > 1 ? ` and the ${count - 1} ${count === 2 ? "organization" : "organizations"} under it` : ""} · click any box to open it</p>
+    <div class="oc-tools">
+      <span class="oc-key"><i class="k-org"></i>Partnership or organization</span>
+      <span class="oc-key"><i class="k-ent"></i>LLC or trust partner</span>
+      <label class="toggle"><input type="checkbox" id="ocFit" ${state.ocFit !== false ? "checked" : ""}> Fit to width</label>
+    </div>
+    <div class="card oc-wrap" id="ocWrap"><div class="oc-size" id="ocSize"><div class="oc-stage" id="ocStage" style="width:${W}px;height:${H}px">
+      <svg class="oc-lines" width="${W}" height="${H}" aria-hidden="true">${lines}</svg>${nodes}</div></div></div>`;
+  // scale down only when the chart is wider than the card; the sizer keeps the scroll area matched to the scaled chart
+  const fit = () => {
+    const wrap = $("#ocWrap"), size = $("#ocSize"), stage = $("#ocStage");
+    if (!wrap) return;
+    const k = state.ocFit !== false ? Math.min(1, (wrap.clientWidth - 2) / W) : 1;
+    stage.style.transform = `scale(${k})`;
+    size.style.width = `${W * k}px`;
+    size.style.height = `${H * k}px`;
+  };
+  $("#ocFit").onchange = (e) => { state.ocFit = e.target.checked; fit(); };
+  fit();
+  addEventListener("resize", fit, { once: true });
 }
 
 // ---------- overview ----------

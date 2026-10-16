@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>FairShare demo</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0b3b2a">
+<meta property="og:url" content="https://shankardba.github.io/fairshare-review/demo.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="FairShare">
+<meta property="og:title" content="FairShare: see how it works">
+<meta property="og:description" content="A one-minute replay of an example partnership: distributions, new partners, retirements and LLC members, to the cent.">
+<meta property="og:image" content="https://shankardba.github.io/fairshare-review/og-image.png?v=2">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* A scripted replay of the product: every figure below is a fixed example, nothing is calculated here. */
+:root {
+  --g-900: #0b3b2a; --g-800: #0f5136; --g-700: #12694a; --g-600: #178a5f; --g-300: #7ddbae; --g-100: #ddf5ea;
+  --lime: #b7f36b; --page: #0b3b2a; --ink: #0e1a15; --ink-2: #4a5b54; --ink-3: #7b8b84; --line: #e3e9e6; --line-strong: #cfd9d4;
+  --bg: #f4f7f5; --surface: #fff; --surface-2: #f8faf9; --err: #b3261e; --warn-bg: #fff6e8; --warn: #c26a00;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: #e6f2ec; font: 15px/1.5 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 22px 20px 30px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.top h1 { margin: 0; font-size: 20px; }
+.top h1 b { color: var(--lime); }
+.top p { margin: 0; color: #a7c9b6; font-size: 14px; }
+
+/* stage: designed at 1200x700 and scaled to fit */
+.viewport { position: relative; width: 100%; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.35); background: var(--bg); }
+.stage { position: absolute; left: 0; top: 0; width: 1200px; height: 700px; transform-origin: 0 0; display: grid; grid-template-columns: 230px 1fr; color: var(--ink); background: var(--bg); }
+.side { background: #0b3b2a; color: #d7ebe0; padding: 18px 14px; display: flex; flex-direction: column; gap: 4px; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 17px; color: #fff; margin-bottom: 16px; }
+.brand b { color: var(--lime); }
+.slabel { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: #8fb3a1; margin: 10px 6px 4px; }
+.org { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 9px; font-size: 13px; }
+.org .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); }
+.org.on { background: rgba(183,243,107,.14); color: #fff; }
+.org.sub { margin-left: 18px; }
+.org .tag { margin-left: auto; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 99px; background: rgba(183,243,107,.18); color: var(--lime); }
+.nav a { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 9px; font-size: 13.5px; color: #d7ebe0; }
+.nav a.on { background: #fff; color: var(--g-900); font-weight: 600; }
+.main { position: relative; padding: 20px 26px; overflow: hidden; }
+.crumbs { font-size: 12px; color: var(--ink-3); margin-bottom: 12px; }
+.crumbs b { color: var(--ink); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.scene { animation: fadein .35s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+h2 { margin: 0 0 6px; font-size: 24px; letter-spacing: -.01em; }
+.muted { color: var(--ink-2); font-size: 13.5px; }
+
+/* form bits */
+.kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 12px 0 14px; }
+.kind { border: 1px solid var(--line-strong); border-radius: 11px; padding: 10px 12px; font-size: 13px; }
+.kind b { display: block; font-size: 13.5px; }
+.kind span { color: var(--ink-2); font-size: 11.5px; }
+.kind.on { border-color: var(--g-600); background: var(--g-100); box-shadow: 0 0 0 1px var(--g-600); }
+.fl { font-size: 11.5px; font-weight: 600; color: var(--ink-2); margin: 10px 0 5px; }
+.fi { height: 36px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-2); padding: 0 11px; display: flex; align-items: center; font-size: 14px; min-width: 220px; }
+.fi.focus { outline: 2px solid var(--g-300); border-color: transparent; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; height: 36px; padding: 0 15px; border-radius: 10px; border: 1px solid var(--line-strong); background: #fff; font-weight: 600; font-size: 13.5px; }
+.btn.primary { background: var(--g-700); border-color: var(--g-700); color: #fff; }
+.btn.press { transform: scale(.96); }
+.toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
+.box { width: 15px; height: 15px; border: 1.5px solid var(--line-strong); border-radius: 4px; display: inline-grid; place-items: center; background: #fff; }
+.box.on { background: var(--g-700); border-color: var(--g-700); }
+.box.on::after { content: ""; width: 7px; height: 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px, -1px); }
+.err { color: var(--err); font-size: 13px; min-height: 18px; margin-top: 8px; }
+
+/* results */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: right; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); padding: 7px 10px; border-bottom: 1px solid var(--line); font-weight: 600; }
+th:first-child, td:first-child { text-align: left; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
+tr.new td:first-child::after { content: "new"; margin-left: 8px; font-size: 10px; font-weight: 700; color: var(--g-700); background: var(--g-100); padding: 1px 6px; border-radius: 99px; }
+tr.gone td { color: var(--ink-3); }
+td.up { color: var(--g-700); font-weight: 600; }
+tfoot td { font-weight: 700; border-bottom: 0; }
+.draft { margin: 12px 0; padding: 10px 13px; border: 1px dashed var(--g-600); background: var(--g-100); border-radius: 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.draft.final { border-style: solid; background: #fff; }
+.draft.whatif { border-color: var(--warn); background: var(--warn-bg); }
+.ok { color: var(--g-700); font-weight: 600; }
+.flow { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.flow h4 { margin: 0 0 6px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.fl-row { display: flex; gap: 10px; font-size: 13.5px; padding: 3px 0; }
+.fl-row span:last-child { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fl-row.d1 { padding-left: 22px; } .fl-row.d2 { padding-left: 44px; color: var(--ink-2); }
+.pop { animation: pop .45s ease both; }
+@keyframes pop { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* caption and cursor */
+.caption { position: absolute; left: 24px; right: 24px; bottom: 18px; background: rgba(11,59,42,.94); color: #fff; border-radius: 12px; padding: 11px 16px; font-size: 14.5px; display: flex; gap: 12px; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.caption .n { flex: none; font-weight: 800; color: #0b3b2a; background: var(--lime); border-radius: 8px; padding: 2px 9px; font-size: 13px; }
+.cursor { position: absolute; left: 0; top: 0; width: 22px; height: 22px; z-index: 50; pointer-events: none; transition: transform .55s cubic-bezier(.4,.1,.2,1); }
+.cursor svg { filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.ripple { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 2px solid var(--g-600); z-index: 49; pointer-events: none; animation: ripple .5s ease-out forwards; }
+@keyframes ripple { from { opacity: .9; transform: scale(.3); } to { opacity: 0; transform: scale(1.3); } }
+
+/* intro / outro */
+.hero { height: 100%; display: grid; place-items: center; text-align: center; }
+.hero h2 { font-size: 34px; }
+.hero .big { font-size: 15px; color: var(--ink-2); max-width: 560px; margin: 8px auto 18px; }
+
+/* controls */
+.controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.controls button { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: transparent; color: #fff; font: 600 13.5px Inter, system-ui, sans-serif; cursor: pointer; }
+.controls button.primary { background: var(--lime); color: #0b3b2a; border-color: var(--lime); }
+.controls button:focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; }
+.chapters { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.chapters button { height: 30px; padding: 0 10px; font-size: 12px; border-radius: 99px; }
+.chapters button.on { background: rgba(183,243,107,.2); border-color: var(--lime); color: var(--lime); }
+.bar { height: 4px; background: rgba(255,255,255,.12); border-radius: 99px; margin-top: 12px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--lime); transition: width .3s; }
+@media (max-width: 640px) { .chapters { margin-left: 0; } .top p { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>Fair<b>Share</b> · how it works</h1>
+    <p>A one-minute replay with an example partnership · <a href="landing.html" style="color:#b7f36b">Back to FairShare</a></p>
+  </div>
+  <div class="viewport" id="viewport">
+    <div class="stage" id="stage">
+      <aside class="side">
+        <div class="brand"><img src="logo.svg" alt="" width="26" height="26"><span>Fair<b>Share</b></span></div>
+        <div class="slabel">Organization</div>
+        <div id="orgs"></div>
+        <div class="slabel">Reports</div>
+        <nav class="nav" id="nav">
+          <a data-v="overview">Overview</a><a data-v="events">Events</a><a data-v="investors">Investors</a>
+        </nav>
+      </aside>
+      <main class="main" id="main"></main>
+      <div class="cursor" id="cursor" style="transform: translate(700px, 420px)"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M3 2l14 8.5-6.3 1.4L7.6 18z" fill="#fff" stroke="#0e1a15" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="primary" id="play" aria-label="Pause">Pause</button>
+    <button id="restart">Restart</button>
+    <div class="chapters" id="chapters"></div>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+</div>
+
+<script>
+// ---------- the example (fixed figures; nothing is calculated) ----------
+const ORG = "Lakeview Properties, LLC";
+const $ = (s, r = document) => r.querySelector(s);
+const stage = $("#stage"), main = $("#main"), cursor = $("#cursor");
+
+// scale the 1200x700 stage to the available width
+function fit() {
+  const k = Math.min(1, $("#viewport").clientWidth / 1200);
+  stage.style.transform = `scale(${k})`;
+  $("#viewport").style.height = `${700 * k}px`;
+}
+addEventListener("resize", fit); fit();
+
+let run = 0, paused = false, wake = null;
+// waits that stop on restart, hold while paused, and keep running when the tab is in the background
+const sleep = (ms) => new Promise((res, rej) => {
+  const me = run;
+  let left = ms;
+  const tick = () => {
+    if (me !== run) return rej("stop");
+    if (paused) { wake = tick; return; }
+    if (left <= 0) return res();
+    const step = Math.min(left, 40);
+    left -= step;
+    setTimeout(tick, step);
+  };
+  tick();
+});
+function setOrgs(withLLC, on = "main") {
+  $("#orgs").innerHTML = `<div class="org ${on === "main" ? "on" : ""}"><span class="dot"></span>${ORG}</div>` +
+    (withLLC ? `<div class="org sub pop ${on === "llc" ? "on" : ""}"><span class="dot"></span>Harborview Holdings, LLC<span class="tag">LLC</span></div>` : "");
+}
+function setNav(v) { document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === v)); }
+function show(html, crumbs) {
+  main.innerHTML = `<div class="crumbs">${crumbs || ORG + " / <b>Events</b>"}</div><div class="scene">${html}</div><div class="caption" id="cap" hidden></div>`;
+}
+async function caption(n, text) {
+  const c = $("#cap"); c.hidden = false;
+  c.innerHTML = `${n ? `<span class="n">${n}</span>` : ""}<span>${text}</span>`;
+}
+async function point(sel, ms = 520) {
+  const el = typeof sel === "string" ? $(sel, stage) : sel;
+  const s = stage.getBoundingClientRect(), r = el.getBoundingClientRect(), k = s.width / 1200;
+  const x = (r.left - s.left + Math.min(r.width * 0.55, 60)) / k, y = (r.top - s.top + r.height * 0.6) / k;
+  cursor.style.transform = `translate(${x}px, ${y}px)`;
+  await sleep(ms);
+  return [x, y];
+}
+async function click(sel) {
+  const [x, y] = await point(sel);
+  const rp = document.createElement("div"); rp.className = "ripple"; rp.style.left = x + "px"; rp.style.top = y + "px";
+  stage.appendChild(rp); setTimeout(() => rp.remove(), 600);
+  const el = $(sel, stage); el.classList.add("press"); await sleep(140); el.classList.remove("press");
+}
+async function type(sel, text) {
+  await click(sel);
+  const el = $(sel, stage); el.classList.add("focus"); el.textContent = "";
+  for (const ch of text) { el.textContent += ch; await sleep(38); }
+  el.classList.remove("focus");
+}
+const KINDS = [["admit", "Admit partners", "New partners buy in"], ["retire", "Retire partners", "Paid out; others take up"],
+  ["ra", "Retire and admit", "One in, one out"], ["pos", "Change positions", "Resize a position"],
+  ["dist", "Pay a distribution", "Paid by ownership"], ["call", "Capital call", "New capital in"]];
+function form(on, fields, extra = "") {
+  return `<div class="card" style="padding:18px 20px">
+    <h2>New event</h2><div class="muted">Nothing is recorded until you finalize.</div>
+    <div class="kinds">${KINDS.map(([k, t, d]) => `<div class="kind ${k === on ? "on" : ""}" id="k-${k}"><b>${t}</b><span>${d}</span></div>`).join("")}</div>
+    ${fields}${extra}
+    <div class="err" id="err"></div>
+    <div class="row" style="margin-top:6px"><span class="btn primary" id="go">Preview the result</span><span class="btn">Cancel</span></div></div>`;
+}
+const field = (id, label, w = 220) => `<div class="fl">${label}</div><div class="fi" id="${id}" style="width:${w}px"></div>`;
+function table(cols, rows, foot) {
+  return `<table><thead><tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.map((r) =>
+    `<tr class="${r.cls || ""}">${r.v.map((v, i) => `<td class="${r.up && r.up.includes(i) ? "up" : ""}">${v}</td>`).join("")}</tr>`).join("")}</tbody>${
+    foot ? `<tfoot><tr>${foot.map((v) => `<td>${v}</td>`).join("")}</tr></tfoot>` : ""}</table>`;
+}
+async function finalize(text) {
+  await click("#fin"); $("#fin").textContent = "Confirm — this becomes permanent"; await sleep(500);
+  await click("#fin");
+  $("#draft").classList.add("final");
+  $("#draft").innerHTML = `<span><span class="ok">✓ Final.</span> ${text}</span><span class="btn">Statements</span>`;
+  await sleep(1100);
+}
+const draft = (msg) => `<div class="draft" id="draft"><span><b>Draft.</b> <span class="ok">${msg}</span></span><span class="row"><span class="btn primary" id="fin">Finalize</span><span class="btn">Change inputs</span></span></div>`;
+
+// ---------- the chapters ----------
+const CH = [
+  ["Start", async () => {
+    setOrgs(false); setNav("overview");
+    show(`<div class="hero"><div><img src="logo.svg" width="64" height="64" alt="">
+      <h2>${ORG}</h2><div class="big">An example partnership: three partners and $250,000 of capital. Watch a year of changes recorded, start to finish.</div>
+      <div class="card" style="padding:6px 14px; text-align:left; width:520px; margin:0 auto">${table(["Partner", "Ownership", "Capital"],
+        [{ v: ["Maya Rivera", "40.00%", "$100,000"] }, { v: ["Owen Chen", "40.00%", "$100,000"] }, { v: ["Sara Patel", "20.00%", "$50,000"] }],
+        ["Total", "100%", "$250,000"])}</div></div></div>`, `${ORG} / <b>Overview</b>`);
+    await sleep(2600);
+  }],
+  ["Distribution", async () => {
+    setNav("events");
+    show(form(null, `<div class="row" style="gap:18px"><div>${field("date", "Effective date")}</div><div>${field("cash", "Cash to distribute")}</div></div>`));
+    await caption("1", "Pay a distribution: pick the event, the date and the amount.");
+    await click("#k-dist"); $("#k-dist").classList.add("on");
+    await type("#date", "12/31/2025"); await type("#cash", "$25,000");
+    await click("#go");
+    show(`<h2>2025 Distributions</h2>${draft("$25,000.00 paid out; positions are unchanged.")}
+      <div class="card" style="padding:6px 14px">${table(["Partner", "Ownership", "Distribution"],
+        [{ v: ["Maya Rivera", "40.00%", "$10,000.00"], up: [2] }, { v: ["Owen Chen", "40.00%", "$10,000.00"], up: [2] }, { v: ["Sara Patel", "20.00%", "$5,000.00"], up: [2] }],
+        ["Total", "100%", "$25,000.00"])}</div>`);
+    await caption("1", "Preview first: every partner's share, paid by ownership, to the cent.");
+    await sleep(1300);
+    await finalize("Statements are ready for every partner.");
+  }],
+  ["Admission", async () => {
+    show(form("admit", `<div class="row" style="gap:18px"><div>${field("date", "Effective date")}</div></div>
+      <div class="fl">New partners</div><div class="row">${["j1", "j2"].map((j) => `<div class="fi" id="${j}" style="width:330px"></div><span class="fi" style="min-width:0;width:150px">Full position</span>`).join('<span style="flex-basis:100%"></span>')}</div>`));
+    await caption("2", "Admit two new partners: a doctor and a company.");
+    await type("#date", "1/1/2026"); await type("#j1", "Lee Nguyen"); await type("#j2", "Harborview Holdings, LLC");
+    await click("#go");
+    show(`<h2>Admit Lee Nguyen, Harborview Holdings</h2>${draft("Total capital is unchanged: $250,000.")}
+      <div class="card" style="padding:6px 14px">${table(["Partner", "Ownership before", "Ownership after", "Capital after"], [
+        { v: ["Maya Rivera", "40.00%", "22.22%", "$55,556"] }, { v: ["Owen Chen", "40.00%", "22.22%", "$55,556"] },
+        { v: ["Sara Patel", "20.00%", "11.11%", "$27,778"] },
+        { v: ["Lee Nguyen", "—", "22.22%", "$55,556"], cls: "new", up: [2] }, { v: ["Harborview Holdings, LLC", "—", "22.22%", "$55,556"], cls: "new", up: [2] }],
+        ["Total", "100%", "100%", "$250,000"])}</div>`);
+    await caption("2", "New partners buy in; everyone else adjusts. The partnership stays in balance.");
+    await sleep(1500);
+    await finalize("Five partners now.");
+  }],
+  ["Retirement", async () => {
+    show(form("retire", `<div class="row" style="gap:18px"><div>${field("date", "Effective date")}</div><div>${field("who", "Retiring partner", 260)}</div></div>
+      <div class="fl">Who takes the shares?</div><span class="toggle"><span class="box on"></span>All remaining partners</span>`));
+    await caption("3", "Retire a partner. Changes in who the partners are take effect on the 1st of a month.");
+    await type("#date", "6/15/2026"); await type("#who", "Sara Patel");
+    await click("#go");
+    $("#err").textContent = "Admissions and retirements take effect on the first of a month. Use Jul 1, 2026 instead of Jun 15, 2026.";
+    await sleep(1700);
+    await type("#date", "7/1/2026"); $("#err").textContent = "";
+    await click("#go");
+    show(`<h2>Retire Sara Patel</h2>${draft("Total capital is unchanged: $250,000.")}
+      <div class="card" style="padding:6px 14px">${table(["Partner", "Ownership before", "Ownership after", "Capital after"], [
+        { v: ["Maya Rivera", "22.22%", "25.00%", "$62,500"], up: [2] }, { v: ["Owen Chen", "22.22%", "25.00%", "$62,500"], up: [2] },
+        { v: ["Sara Patel", "11.11%", "—", "Paid out $27,778"], cls: "gone" },
+        { v: ["Lee Nguyen", "22.22%", "25.00%", "$62,500"], up: [2] }, { v: ["Harborview Holdings, LLC", "22.22%", "25.00%", "$62,500"], up: [2] }],
+        ["Total", "100%", "100%", "$250,000"])}</div>`);
+    await caption("3", "She's paid out and keeps credit for her time invested. The others take up her share.");
+    await sleep(1500);
+    await finalize("Four partners, 25% each.");
+  }],
+  ["LLC members", async () => {
+    setNav("investors");
+    show(`<h2>Harborview Holdings, LLC</h2><div class="muted">A partner that is a company</div>
+      <div class="card" style="padding:16px 18px; margin-top:12px">
+        <span class="btn" id="mk">This partner is an LLC or trust: record its members</span>
+        <div id="mform" hidden><div class="row" style="gap:18px; margin-top:12px"><div>${field("m1", "Member", 260)}</div><div>${field("a1", "Put in", 160)}</div></div>
+          <div class="row" style="gap:18px"><div>${field("m2", "Member", 260)}</div><div>${field("a2", "Put in", 160)}</div></div>
+          <div class="row" style="margin-top:12px"><span class="btn primary" id="go">Preview the capitalization</span></div></div></div>`, `${ORG} / <b>Investors</b>`);
+    await caption("4", "Harborview is an LLC with members of its own. Record them once.");
+    await click("#mk"); $("#mform").hidden = false; setOrgs(true, "llc");
+    await type("#m1", "Elena Moreno"); await type("#a1", "$60,000"); await type("#m2", "James Park"); await type("#a2", "$40,000");
+    await click("#go");
+    show(`<h2>Harborview Holdings, LLC</h2>${draft("Its members' split is recorded.")}
+      <div class="card" style="padding:6px 14px">${table(["Member", "Share of Harborview"], [{ v: ["Elena Moreno", "60.00%"] }, { v: ["James Park", "40.00%"] }])}</div>`,
+      `${ORG} / Harborview Holdings, LLC / <b>Initial capitalization</b>`);
+    await caption("4", "It now appears under the partnership, tagged LLC. Any depth works the same way.");
+    await sleep(1200);
+    await finalize("Harborview has two members.");
+  }],
+  ["Flow-down", async () => {
+    setOrgs(true, "main"); setNav("events");
+    show(form(null, `<div class="row" style="gap:18px"><div>${field("date", "Effective date")}</div><div>${field("cash", "Cash to distribute")}</div></div>`));
+    await caption("5", "One distribution, entered once at the top.");
+    await click("#k-dist"); $("#k-dist").classList.add("on");
+    await type("#date", "12/31/2026"); await type("#cash", "$30,000");
+    await click("#go");
+    show(`<h2>2026 Distributions</h2>${draft("$30,000.00 paid out; positions are unchanged.")}
+      <div class="card" style="padding:6px 14px">${table(["Partner", "Ownership", "Distribution"], [
+        { v: ["Maya Rivera", "25.00%", "$7,500.00"], up: [2] }, { v: ["Owen Chen", "25.00%", "$7,500.00"], up: [2] },
+        { v: ["Lee Nguyen", "25.00%", "$7,500.00"], up: [2] }, { v: ["Harborview Holdings, LLC", "25.00%", "$7,500.00"], up: [2] }],
+        ["Total", "100%", "$30,000.00"])}</div><div id="flowbox"></div>`);
+    await sleep(1100);
+    await finalize("Recorded at every level.");
+    $("#flowbox").innerHTML = `<div class="flow pop"><h4>Where the cash went</h4>
+      <div class="fl-row"><b>${ORG}</b><span>$30,000.00</span></div>
+      <div class="fl-row d1 pop" style="animation-delay:.3s">└ Harborview Holdings, LLC<span>$7,500.00</span></div>
+      <div class="fl-row d2 pop" style="animation-delay:.6s">└ Elena Moreno · 60%<span>$4,500.00</span></div>
+      <div class="fl-row d2 pop" style="animation-delay:.8s">└ James Park · 40%<span>$3,000.00</span></div></div>`;
+    await caption("5", "It flows down through the LLC to its members automatically. Every level adds up to the cent.");
+    await sleep(3000);
+  }],
+  ["What-if", async () => {
+    show(form("retire", `<div class="row" style="gap:18px"><div>${field("date", "Effective date")}</div><div>${field("who", "Retiring partner", 260)}</div></div>`,
+      `<div style="margin-top:12px"><span class="toggle" id="wi"><span class="box" id="wibox"></span><b>What-if only.</b>&nbsp;Never becomes part of the record.</span></div>`));
+    await caption("6", "Try a change before you make it: save it as a what-if.");
+    await type("#date", "1/1/2027"); await type("#who", "Owen Chen");
+    await click("#wi"); $("#wibox").classList.add("on");
+    await click("#go");
+    show(`<h2>What if: Retire Owen Chen</h2><div class="draft whatif"><span><b>What-if scenario: not part of the official record.</b></span><span class="btn" id="del">Delete scenario</span></div>
+      <div class="card" style="padding:6px 14px">${table(["Partner", "Ownership now", "If he retires"], [
+        { v: ["Maya Rivera", "25.00%", "33.33%"], up: [2] }, { v: ["Owen Chen", "25.00%", "—"], cls: "gone" },
+        { v: ["Lee Nguyen", "25.00%", "33.33%"], up: [2] }, { v: ["Harborview Holdings, LLC", "25.00%", "33.33%"], up: [2] }])}</div>`);
+    await sleep(1800);
+    await click("#del");
+    await caption("6", "Deleted. Nothing changed.");
+    await sleep(1200);
+  }],
+  ["Done", async () => {
+    setNav("overview");
+    show(`<div class="hero"><div><img src="logo.svg" width="64" height="64" alt="">
+      <h2>Every partner's share, kept exact.</h2>
+      <div class="big">Every change recorded once. Every partner in balance. Every level, to the cent.</div></div></div>`, `${ORG} / <b>Overview</b>`);
+    cursor.style.transform = "translate(1240px, 740px)";
+    await sleep(3500);
+  }],
+];
+
+// ---------- player ----------
+$("#chapters").innerHTML = CH.map(([t], i) => `<button data-i="${i}">${t}</button>`).join("");
+async function play(from = 0) {
+  const me = ++run; paused = false; $("#play").textContent = "Pause";
+  for (let i = from; i < CH.length; i++) {
+    document.querySelectorAll("#chapters button").forEach((b) => b.classList.toggle("on", +b.dataset.i === i));
+    $("#bar").style.width = `${(i / (CH.length - 1)) * 100}%`;
+    try { await CH[i][1](); } catch (e) { if (e === "stop") return; throw e; }
+    if (me !== run) return;
+  }
+  $("#play").textContent = "Replay";
+}
+$("#play").onclick = () => {
+  if ($("#play").textContent === "Replay") return play(0);
+  paused = !paused;
+  $("#play").textContent = paused ? "Play" : "Pause";
+  if (!paused && wake) { const w = wake; wake = null; w(); }
+};
+$("#restart").onclick = () => play(0);
+$("#chapters").onclick = (e) => { const b = e.target.closest("button"); if (b) play(+b.dataset.i); };
+// respect reduced motion: start paused on the first frame
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) { play(0); paused = true; $("#play").textContent = "Play"; } else play(0);
+</script>
+</body>
+</html>
