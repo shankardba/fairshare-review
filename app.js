@@ -18,6 +18,8 @@ const state = { persona: store.get("fs.persona", "me"), user: null, orgs: [], ev
 // database. Static review snapshot (window.FS_STATIC, GitHub Pages): every response was
 // generated ahead of time and encrypted; the password unlocks it in this browser.
 const STATIC = window.FS_STATIC || null;
+// the review snapshot has no sign-up: point to the landing-page preview instead
+if (STATIC) { const lf = document.querySelector(".login-foot"); if (lf) lf.innerHTML = '<a href="landing.html">About FairShare</a>'; }
 let bundle = null;
 
 async function api(path) {
@@ -166,7 +168,9 @@ async function start() {
   $("#whoTitle").textContent = s.user.id !== "me" && s.user.email ? `Previewing as ${s.user.name} · ${s.user.title}` : s.user.title;
   state.orgs = await api("orgs");
   document.querySelectorAll("[data-admin]").forEach((a) => (a.hidden = s.user.role === "investor"));
-  $("#newOrg").hidden = STATIC || !s.user.superuser;
+  // the superuser, and self-serve customers, can start partnerships of their own
+  $("#newOrg").hidden = STATIC || !(s.user.superuser || s.user.canCreate);
+  $("#newOrg").textContent = s.user.superuser ? "+ New organization" : "+ New partnership";
   $("#login").hidden = true;
   $("#shell").hidden = false;
   render();
@@ -232,7 +236,7 @@ async function render() {
   const r = route();
   if (state.stmt && state.stmt !== r.id) state.stmt = null;
   if (r.org === "new-org") {
-    if (STATIC || !state.user.superuser) return go((state.orgs.find((o) => o.access) || {}).id, "overview");
+    if (STATIC || !(state.user.superuser || state.user.canCreate)) return go((state.orgs.find((o) => o.access) || {}).id, "overview");
     renderSide(r); $("#side").classList.remove("open"); crumbs(["New organization"]);
     return drawOrgForm($("#view"), null);
   }
@@ -247,7 +251,7 @@ async function render() {
   crumbs([...trail, viewName]);
   const view = $("#view");
   try {
-    if (r.view === "capitalize" && state.user.superuser && !STATIC) { crumbs([...trail, "Initial capitalization"]); return drawOrgForm(view, org); }
+    if (r.view === "capitalize" && org.canFound && !STATIC) { crumbs([...trail, "Initial capitalization"]); return drawOrgForm(view, org); }
     if (!org.hasData) return renderNoData(view, org);
     if (r.view === "events") return await renderEvents(view, r);
     if (r.view === "investors") return await renderInvestors(view, r);
@@ -268,7 +272,7 @@ function renderNoData(view, org) {
     <div class="card empty">
       <svg viewBox="0 0 20 20"><path d="M4 3h9l3 3v11H4zm8 1v3h3"/></svg>
       <p><b>No events recorded${kids.length ? " at this level" : ""}.</b><br>${kids.length ? "Ownership is tracked in the sub-organizations above." : "Record the initial capitalization to begin."}</p>
-      ${!kids.length && state.user.superuser && !STATIC ? `<a class="btn primary" href="#/${org.id}/capitalize">Enter the initial capitalization</a>` : ""}
+      ${!kids.length && org.canFound && !STATIC ? `<a class="btn primary" href="#/${org.id}/capitalize">Enter the starting positions</a>` : ""}
     </div>`;
 }
 
@@ -458,6 +462,8 @@ const blankForm = () => ({ kind: "", date: "", scenario: false, joiners: [{ name
   leavers: [""], how: "", to: "all", buyer: "", newcomer: "", units: {}, cash: "", capital: "", callJoiners: [] });
 const money = (t) => { const n = Number(String(t).replace(/[$,\s]/g, "")); return Number.isFinite(n) ? n : NaN; };
 const posText = (u) => String(+Number(u || 0).toFixed(4));
+// kinds of event that change who the partners are: dated on the 1st of a month only
+const MOVES = ["admission", "retirement", "retire_admit"];
 const KINDS = [
   ["admission", "Admit partners", "New partners buy in. Existing partners sell down so total capital stays the same.",
     "M8 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-6 8c0-3 2.7-5 6-5s6 2 6 5zM15 5h2v3h3v2h-3v3h-2v-3h-3V8h3z"],
@@ -577,7 +583,7 @@ function drawEventForm(r, members, error) {
         ${step(2, "When?")}
         <label class="fl" for="evDate">Effective date</label>
         <input class="fi date" type="date" id="evDate" required value="${esc(f.date)}" ${latest ? `min="${latest}"` : ""}>
-        <div class="hint">${latest ? `On or after the latest recorded event (${fmtIso(latest)}). ` : ""}${f.kind === "distribution" ? "" : "Share-months are counted from this date."}</div>
+        <div class="hint">${MOVES.includes(f.kind) ? "<b>Admissions and retirements take effect on the 1st of a month.</b> " : ""}${latest ? `On or after the latest recorded event (${fmtIso(latest)}). ` : ""}${f.kind === "distribution" ? "" : "Share-months are counted from this date."}</div>
         ${step(3, "Details")}
         ${details[f.kind]()}
         <label class="toggle whatif"><input type="checkbox" id="scenario" ${f.scenario ? "checked" : ""}> <span><b>What-if only.</b> Save as a scenario for comparison; it never becomes part of the record.</span></label>
@@ -615,6 +621,10 @@ function drawEventForm(r, members, error) {
   $("#evForm").onsubmit = async (ev) => {
     ev.preventDefault(); read();
     if (STATIC) return again("This review copy is read-only. The result is calculated in the live app.");
+    if (MOVES.includes(f.kind) && f.date && !f.date.endsWith("-01")) {
+      const [y, mo] = f.date.split("-").map(Number), next = `${mo === 12 ? y + 1 : y}-${String(mo === 12 ? 1 : mo + 1).padStart(2, "0")}-01`;
+      return again(`Admissions and retirements take effect on the first of a month. Use ${fmtIso(next)} instead of ${fmtIso(f.date)}.`);
+    }
     const nameOf = (k) => shortName(members.find((m) => m.key === k)?.name || "");
     let body;
     if (f.kind === "admission") {
@@ -810,14 +820,15 @@ async function drawReport(r) {
   $("#csv").onclick = () => downloadCsv(e, cols, rows);
 }
 
-// ---------- new organization + initial capitalization (superuser) ----------
+// ---------- new organization + initial capitalization (superuser, or the customer who owns it) ----------
 const blankCap = () => ({ name: "", kind: "partnership", parent: "", par: "10,000", date: "", rows: [{ name: "", amount: "", dev: false }, { name: "", amount: "", dev: false }, { name: "", amount: "", dev: false }] });
 
 function drawOrgForm(view, org, error) {
   const f = state.capForm = { ...blankCap(), ...(state.capForm || {}) };
   if (!f.rows || !f.rows.length) f.rows = blankCap().rows;
   const par = org ? null : money(f.par);
-  const parents = state.orgs.filter((o) => o.access);
+  // a customer can nest a new organization only under one they own
+  const parents = state.orgs.filter((o) => o.access && (state.user.superuser || o.canFound));
   view.innerHTML = `
     <form class="card ev-form org-form" id="orgForm">
       <div class="rep-meta"><span class="chip"><i></i>${org ? "Initial capitalization" : "New organization"}</span><span>Nothing is recorded as final until you review and finalize.</span></div>
@@ -998,7 +1009,7 @@ async function openInvestor(r, key) {
   const entry = (state.invList || []).find((x) => x.key === key) || {};
   if (entry.entityOrg) dr.querySelector(".sub").insertAdjacentHTML("afterend",
     `<p><a class="btn" href="#/${entry.entityOrg}/overview">Open ${esc(shortName(d.name))}'s members ›</a></p>`);
-  else if (state.user.superuser && !STATIC && entry.status === "Active") {
+  else if (state.orgs.find((o) => o.id === r.org)?.canFound && !STATIC && entry.status === "Active") {
     dr.querySelector(".sub").insertAdjacentHTML("afterend", `<p><button class="btn" id="mkEntity">This partner is an LLC or trust: record its members</button></p>
       <div class="login-err" id="entErr" role="alert"></div>`);
     dr.querySelector("#mkEntity").onclick = async () => {

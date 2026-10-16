@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>FairShare</title>
+<meta name="description" content="Ownership, buy-ins, payouts and distributions for complex, multi-layered partnerships, in one secure place.">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --g-900: #0b3b2a; --g-800: #0f5136; --g-700: #12694a; --g-600: #178a5f; --g-100: #ddf5ea; --g-50: #f1fbf6;
+  --lime: #b7f36b;
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #f4f8f6; --line: #e3e9e6; --line-strong: #cfd9d4;
+  --ink: #0e1a15; --ink-2: #4a5b54; --ink-3: #7b8b84;
+  --accent: var(--g-700); --accent-soft: var(--g-100); --hero: #0b3b2a; --hero-ink: #ffffff; --hero-ink-2: #c8e6d2;
+  --err: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #07130e; --surface: #0d1c16; --surface-2: #10231b; --line: #1c3328; --line-strong: #27463a;
+    --ink: #e6f2ec; --ink-2: #a7bfb4; --ink-3: #6f8a7e; --accent: #4cc690; --accent-soft: #123a2a; --hero: #062a1d; --err: #ff8a80;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #07130e; --surface: #0d1c16; --surface-2: #10231b; --line: #1c3328; --line-strong: #27463a;
+  --ink: #e6f2ec; --ink-2: #a7bfb4; --ink-3: #6f8a7e; --accent: #4cc690; --accent-soft: #123a2a; --hero: #062a1d; --err: #ff8a80;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 12px; font: 600 15px Inter, system-ui, sans-serif; text-decoration: none; border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
+.btn.primary { background: var(--lime); color: #0b3b2a; }
+.btn.primary:hover { filter: brightness(.95); }
+.btn.ghost { color: var(--hero-ink); border-color: rgba(255,255,255,.28); background: transparent; }
+.btn.ghost:hover { background: rgba(255,255,255,.08); }
+.btn.solid { background: var(--g-700); color: #fff; }
+.btn.solid:hover { background: var(--g-800); }
+.btn:focus-visible, input:focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; }
+
+/* hero */
+.hero { background: var(--hero); color: var(--hero-ink); padding-bottom: 72px; }
+.nav { display: flex; align-items: center; justify-content: space-between; height: 76px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; text-decoration: none; }
+.brand b { color: var(--lime); font-weight: 700; }
+.nav .links { display: flex; gap: 10px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 56px; align-items: center; padding-top: 40px; }
+.hero h1 { font-size: clamp(36px, 5.2vw, 58px); line-height: 1.05; letter-spacing: -.025em; margin: 0 0 20px; font-weight: 800; }
+.hero h1 em { font-style: normal; color: var(--lime); }
+.hero p.lead { font-size: 19px; color: var(--hero-ink-2); margin: 0 0 32px; max-width: 34em; }
+.hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero .fine { margin-top: 14px; font-size: 13px; color: var(--hero-ink-2); }
+
+/* the illustration: one distribution flowing down through nested partners (fictional) */
+.flow { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 20px; padding: 22px; }
+.flow .cap { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--hero-ink-2); margin-bottom: 12px; }
+.node { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fff; color: #0e1a15; border-radius: 12px; padding: 12px 14px; margin-top: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.node.top { background: var(--lime); }
+.node small { display: block; color: #4a5b54; font-size: 12px; font-weight: 500; }
+.node b { font-size: 15px; }
+.node .amt { font-weight: 700; font-variant-numeric: tabular-nums; color: #12694a; }
+.node.top .amt { color: #0b3b2a; }
+.lvl1 { margin-left: 22px; } .lvl2 { margin-left: 44px; }
+.flow .people { margin: 8px 0 0 66px; font-size: 13px; color: var(--hero-ink-2); }
+.flow .people b { color: #fff; font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) {
+  .anim .node, .anim .flow .people { animation: rise .6s both; }
+  .anim .node:nth-of-type(2) { animation-delay: .15s; } .anim .node:nth-of-type(3) { animation-delay: .3s; }
+  .anim .node:nth-of-type(4) { animation-delay: .45s; } .anim .flow .people { animation-delay: .6s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+
+/* sections */
+section { padding: 80px 0; }
+.eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+h2 { font-size: clamp(28px, 3.4vw, 38px); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 14px; }
+.sub { color: var(--ink-2); font-size: 18px; max-width: 40em; margin: 0; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 40px; }
+.card { background: var(--surface-2); border-radius: 18px; padding: 26px; }
+.card .ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--surface); color: var(--accent); margin-bottom: 16px; }
+.card .ic svg { width: 22px; height: 22px; }
+.card h3 { margin: 0 0 6px; font-size: 18px; }
+.card p { margin: 0; color: var(--ink-2); font-size: 15px; }
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-top: 40px; counter-reset: s; }
+.step { border-top: 3px solid var(--accent); padding-top: 18px; }
+.step::before { counter-increment: s; content: "0" counter(s); font-weight: 800; color: var(--accent); font-size: 14px; letter-spacing: .06em; }
+.step h3 { margin: 8px 0 6px; font-size: 18px; }
+.step p { margin: 0; color: var(--ink-2); font-size: 15px; }
+.alt { background: var(--surface-2); }
+.trust { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 36px; }
+.trust div { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; color: var(--ink-2); }
+.trust b { display: block; color: var(--ink); font-size: 16px; }
+.trust svg { flex: none; width: 22px; height: 22px; color: var(--accent); margin-top: 2px; }
+
+/* sign-up */
+.signup { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 56px; align-items: start; }
+.signup ul { margin: 22px 0 0; padding: 0; list-style: none; color: var(--ink-2); }
+.signup li { padding: 6px 0 6px 28px; position: relative; }
+.signup li::before { content: ""; position: absolute; left: 0; top: 13px; width: 14px; height: 8px; border-left: 2.5px solid var(--accent); border-bottom: 2.5px solid var(--accent); transform: rotate(-45deg); }
+form.box { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 28px; box-shadow: 0 20px 50px rgba(11,59,42,.08); }
+form.box h3 { margin: 0 0 18px; font-size: 20px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 14px 0 6px; }
+input { width: 100%; height: 46px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--ink); padding: 0 14px; font: 15px Inter, system-ui, sans-serif; }
+.hint { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+.err { color: var(--err); font-size: 14px; min-height: 20px; margin: 14px 0 0; }
+form.box .btn { width: 100%; margin-top: 8px; height: 48px; }
+.have { text-align: center; font-size: 14px; color: var(--ink-2); margin: 14px 0 0; }
+.have a { color: var(--accent); font-weight: 600; }
+footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--ink-3); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .hero-grid, .signup { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .steps, .trust { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .wrap { padding: 0 16px; }
+  .nav .links { gap: 8px; }
+  .nav .links .btn { height: 38px; padding: 0 12px; font-size: 14px; }
+  .brand { font-size: 18px; }
+  .steps, .trust, .row2 { grid-template-columns: minmax(0, 1fr); }
+  section { padding: 56px 0; }
+  .lvl1 { margin-left: 14px; } .lvl2 { margin-left: 28px; } .flow .people { margin-left: 42px; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <nav class="nav" aria-label="Main">
+      <a class="brand" href="landing.html"><img src="logo.svg" alt="" width="34" height="34"><span>Fair<b>Share</b></span></a>
+      <div class="links" id="navLinks">
+        <a class="btn ghost" href="./">Sign in</a>
+        <a class="btn primary" href="#get-started">Get started</a>
+      </div>
+    </nav>
+    <div class="hero-grid">
+      <div>
+        <h1>Every partner's share, <em>kept exact.</em></h1>
+        <p class="lead">Ownership, buy-ins, payouts and distributions for complex, multi-layered partnerships, in one secure place.</p>
+        <div class="ctas">
+          <a class="btn primary" href="#get-started">Set up your partnership</a>
+          <a class="btn ghost" href="#how">See how it works</a>
+        </div>
+        <div class="fine">Up and running in minutes. No consultants, no custom setup.</div>
+      </div>
+      <div class="flow" aria-label="Example: a distribution reaching every level of a partnership">
+        <div class="cap">One distribution, every level</div>
+        <div class="node top"><span><b>Your partnership</b><small>8 partners</small></span><span class="amt">$150,000</span></div>
+        <div class="node lvl1"><span><b>An LLC partner</b><small>7 members</small></span><span class="amt">$34,615</span></div>
+        <div class="node lvl2"><span><b>A family trust inside it</b><small>2 beneficiaries</small></span><span class="amt">$4,615</span></div>
+        <div class="people"><b>$2,308</b> each, to the cent</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">Why FairShare</p>
+      <h2>Small errors move real money, every year</h2>
+      <p class="sub">Every admission, retirement and distribution changes what each partner is owed. FairShare keeps it right, for the life of the partnership.</p>
+      <div class="cards">
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8h14M7 8l-3 7a4 4 0 0 0 6 0L7 8zm10 0-3 7a4 4 0 0 0 6 0l-3-7z"/></svg></div>
+          <h3>Always in balance</h3>
+          <p>Every partner's position reconciles after every change. No drift, no retyping, no surprises.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <h3>Fair to every partner</h3>
+          <p>Current and former partners are each credited fairly for their investment and their time in the partnership.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-3h14v3"/></svg></div>
+          <h3>Partners inside partners</h3>
+          <p>LLCs and trusts with members of their own, at any depth. Every level reconciles to the cent.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt" id="how">
+    <div class="wrap">
+      <p class="eyebrow">How it works</p>
+      <h2>Simple to start, then it runs itself</h2>
+      <div class="steps">
+        <div class="step"><h3>Set up online</h3><p>Create your partnership and its starting positions with a guided form.</p></div>
+        <div class="step"><h3>Add your partners</h3><p>Individuals, LLCs and trusts, each with their own members.</p></div>
+        <div class="step"><h3>Record changes</h3><p>Admissions, retirements and distributions in a few clicks.</p></div>
+        <div class="step"><h3>Automatic statements</h3><p>Every partner gets a clear statement for every change.</p></div>
+      </div>
+      <div class="trust">
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5z"/></svg><span><b>Final means final</b>Recorded changes can't be edited after the fact.</span></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span><b>Full audit trail</b>Who did what, and when, kept permanently.</span></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M17 11l2 2 4-4"/></svg><span><b>Access by role</b>Everyone sees only what they're allowed to.</span></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg><span><b>Statements on demand</b>Ready to print or share, for any change.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="get-started">
+    <div class="wrap signup">
+      <div>
+        <p class="eyebrow">Get started</p>
+        <h2>Set up your partnership in minutes</h2>
+        <p class="sub">Create your account, name your partnership, and enter your partners. You can add LLCs, trusts and history as you go.</p>
+        <ul>
+          <li>You administer your own partnership</li>
+          <li>Add LLCs, trusts and new partners whenever you need</li>
+          <li>Secure, private, and yours alone</li>
+        </ul>
+      </div>
+      <form class="box" id="signup" novalidate>
+        <h3>Create your account</h3>
+        <div class="row2">
+          <div><label for="su-name">Your name</label><input id="su-name" name="name" autocomplete="name" required maxlength="120"></div>
+          <div><label for="su-email">Email</label><input id="su-email" name="email" type="email" autocomplete="email" required maxlength="200"></div>
+        </div>
+        <label for="su-pass">Password</label>
+        <input id="su-pass" name="password" type="password" autocomplete="new-password" required minlength="10">
+        <div class="hint">At least 10 characters.</div>
+        <label for="su-org">Partnership name</label>
+        <input id="su-org" name="org" required maxlength="120" placeholder="e.g. Lakeview Medical Properties, LLC">
+        <div class="err" id="su-err" role="alert"></div>
+        <button class="btn solid" type="submit" id="su-go">Create my partnership</button>
+        <p class="have">Already have an account? <a href="./">Sign in</a></p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap"><span>© <span id="yr"></span> FairShare</span><span>Partnership ownership, kept exact.</span></div>
+</footer>
+
+<script>window.FS_PREVIEW = true;</script>
+<script>
+document.getElementById("yr").textContent = new Date().getFullYear();
+// animate the illustration only once the page is live (it stays fully visible without script, in print and in previews)
+if (document.visibilityState === "visible") document.documentElement.classList.add("anim");
+
+// the review site shows this page as a preview: no server behind it, so sign-up is switched off
+const PREVIEW = !!window.FS_PREVIEW;
+if (PREVIEW) {
+  const f = document.getElementById("signup");
+  f.querySelectorAll("input, button").forEach((el) => (el.disabled = true));
+  document.getElementById("su-err").textContent = "Preview only: sign-up opens when FairShare launches.";
+  document.getElementById("su-err").style.color = "var(--ink-2)";
+}
+
+// already signed in? offer the way back in instead of a second account
+if (!PREVIEW) fetch("/api/session", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((s) => {
+  if (!s || !s.user) return;
+  document.getElementById("navLinks").innerHTML = '<a class="btn primary" href="./">Open FairShare</a>';
+}).catch(() => {});
+
+const form = document.getElementById("signup");
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (PREVIEW) return;
+  const err = document.getElementById("su-err"), go = document.getElementById("su-go");
+  const v = (id) => document.getElementById(id).value.trim();
+  const body = { name: v("su-name"), email: v("su-email"), password: document.getElementById("su-pass").value, org: v("su-org") };
+  err.textContent = "";
+  if (!body.name || !body.email || !body.org) return (err.textContent = "Please fill in every field.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email)) return (err.textContent = "Enter a valid email address.");
+  if (body.password.length < 10) return (err.textContent = "Use a password of at least 10 characters.");
+  go.disabled = true; go.textContent = "Creating your partnership…";
+  try {
+    const r = await fetch("/api/signup", { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "Something went wrong. Please try again.");
+    // straight into the new partnership's starting positions
+    location.href = "/app#/" + encodeURIComponent(j.org) + "/capitalize";
+  } catch (e) {
+    err.textContent = e.message;
+    go.disabled = false; go.textContent = "Create my partnership";
+  }
+});
+</script>
+</body>
+</html>
