@@ -548,7 +548,7 @@ async function renderEvents(view, r) {
 
 // ---------- new event (its own page) ----------
 const blankForm = () => ({ kind: "", date: "", scenario: false, joiners: [{ name: "", units: 1 }], devSells: true,
-  leavers: [""], how: "", to: "all", buyer: "", newcomer: "", units: {}, cash: "", capital: "", callJoiners: [] });
+  leavers: [""], how: "", to: "all", devTakes: true, adjust: false, buyer: "", newcomer: "", units: {}, cash: "", capital: "", callJoiners: [] });
 const money = (t) => { const n = Number(String(t).replace(/[$,\s]/g, "")); return Number.isFinite(n) ? n : NaN; };
 const posText = (u) => String(+Number(u || 0).toFixed(4));
 // kinds of event that change who the partners are: dated on the 1st of a month only
@@ -622,8 +622,21 @@ function drawEventForm(r, members, error) {
   // one-for-one by default; uneven numbers (two out, one in) can only be a re-split
   const how = () => f.how || (f.joiners.length === f.leavers.length ? "takeover" : "resplit");
 
+  const hasDev = members.some((m) => m.isDeveloper);
+  const posTable = () => `
+      <label class="fl">Position sizes</label>
+      <div class="pos-head"><span>Partner</span><span>Shares now</span><span>Position</span></div>
+      ${members.map((m) => { const cur = posText(m.units), v = f.units[m.key] ?? cur; return `<div class="pos-row ${v !== cur ? "chg" : ""}">
+        <span>${esc(m.name)}</span><span>${fmt(m.shares, "num")}</span>
+        <input class="fi pu" data-k="${m.key}" data-cur="${cur}" inputmode="decimal" value="${esc(v)}" aria-label="Position for ${esc(m.name)}"></div>`; }).join("")}
+      <div class="hint">1 = one full physician position. Change only the partners whose position is changing.</div>`;
+  const devTakesToggle = () => hasDev ? `
+      <label class="toggle fl2"><input type="checkbox" id="devTakes" ${f.devTakes ? "checked" : ""}> The developer takes up a share too</label>
+      <div class="hint">Unchecked: only the physicians take up the retiring partners' shares; the developer's position doesn't change.</div>` : "";
   const details = {
-    admission: () => joinerRows(true) + devToggle(),
+    admission: () => joinerRows(true) + devToggle() + `
+      <label class="toggle fl2"><input type="checkbox" id="adjust" ${f.adjust ? "checked" : ""}> Also reset existing partners' position sizes</label>
+      ${f.adjust ? posTable() : ""}`,
     retire_admit: () => `${leaverRows()}${joinerRows(how() === "resplit", "Last, First, M.D. or entity name")}
       <label class="fl">How do the shares move?</label>
       <div class="choices">
@@ -635,16 +648,11 @@ function drawEventForm(r, members, error) {
       <label class="fl">Who takes the shares?</label>
       <div class="choices">
         <label class="toggle"><input type="radio" name="to" value="all" ${f.to === "all" ? "checked" : ""}> All remaining partners, in proportion to what they hold</label>
+        ${f.to === "all" ? devTakesToggle() : ""}
         <label class="toggle"><input type="radio" name="to" value="buyer" ${f.to === "buyer" ? "checked" : ""}> One current partner buys them</label>
         ${f.to === "buyer" ? `<select class="fi sub" id="buyer" required>${opt(f.buyer, f.leavers)}</select>` : ""}
       </div>`,
-    restructure: () => `
-      <label class="fl">Position sizes</label>
-      <div class="pos-head"><span>Partner</span><span>Shares now</span><span>Position</span></div>
-      ${members.map((m) => { const cur = posText(m.units), v = f.units[m.key] ?? cur; return `<div class="pos-row ${v !== cur ? "chg" : ""}">
-        <span>${esc(m.name)}</span><span>${fmt(m.shares, "num")}</span>
-        <input class="fi pu" data-k="${m.key}" data-cur="${cur}" inputmode="decimal" value="${esc(v)}" aria-label="Position for ${esc(m.name)}"></div>`; }).join("")}
-      <div class="hint">1 = one full physician position. Change only the partners whose position is changing; total capital stays the same and everyone else adjusts in proportion.</div>`,
+    restructure: () => posTable(),
     distribution: () => `
       <label class="fl" for="cash">Cash to distribute</label>
       <input class="fi" id="cash" inputmode="decimal" placeholder="$0.00" value="${esc(f.cash)}" required>
@@ -691,6 +699,8 @@ function drawEventForm(r, members, error) {
     box.querySelectorAll(".cjn").forEach((el) => (f.callJoiners[+el.dataset.i].name = el.value));
     box.querySelectorAll(".pu").forEach((el) => { if (el.value.trim() === el.dataset.cur) delete f.units[el.dataset.k]; else f.units[el.dataset.k] = el.value.trim(); });
     if (v("devSells")) f.devSells = v("devSells").checked;
+    if (v("devTakes")) f.devTakes = v("devTakes").checked;
+    if (v("adjust")) f.adjust = v("adjust").checked;
     if (v("buyer")) f.buyer = v("buyer").value;
     if (v("newcomer")) f.newcomer = v("newcomer").value;
     const to = box.querySelector("input[name=to]:checked"); if (to) f.to = to.value;
@@ -700,7 +710,7 @@ function drawEventForm(r, members, error) {
   };
   const blank = { joiners: () => ({ name: "", units: 1 }), leavers: () => "", callJoiners: () => ({ name: "" }) };
   box.querySelectorAll("input[name=kind]").forEach((el) => (el.onchange = () => { read(); f.kind = el.value; again(); }));
-  box.querySelectorAll("input[name=to], .lv").forEach((el) => (el.onchange = () => { read(); again(); }));
+  box.querySelectorAll("input[name=to], .lv, #adjust").forEach((el) => (el.onchange = () => { read(); again(); }));
   box.querySelectorAll("input[name=how]").forEach((el) => (el.onchange = () => { read(); f.how = el.value; again(); }));
   box.querySelectorAll(".add").forEach((el) => (el.onclick = () => { read(); f[el.dataset.add].push(blank[el.dataset.add]()); again(); }));
   box.querySelectorAll(".x").forEach((el) => (el.onclick = () => { read(); f[el.dataset.list].splice(+el.dataset.i, 1); again(); }));
@@ -718,19 +728,23 @@ function drawEventForm(r, members, error) {
     let body;
     if (f.kind === "admission") {
       const js = f.joiners.map((j) => ({ name: j.name.trim(), units: j.units })).filter((j) => j.name);
-      body = { type: "admission", title: "Admit " + js.map((j) => shortName(j.name)).join(", "), inputs: { joiners: js, developer_sells_down: f.devSells } };
+      const ch = f.adjust ? Object.entries(f.units).map(([k, t]) => ({ memberId: k, units: Number(t) })) : [];
+      if (ch.some((c) => !(c.units > 0))) return again("A position must be a number greater than zero.");
+      body = { type: "admission", title: "Admit " + js.map((j) => shortName(j.name)).join(", "),
+               inputs: { joiners: js, developer_sells_down: f.devSells, ...(ch.length ? { units: ch } : {}) } };
     } else if (f.kind === "retirement") {
       const ls = f.leavers.filter(Boolean), who = ls.map(nameOf).join(", ");
       if (new Set(ls).size !== ls.length) return again("The same partner is listed twice.");
       if (f.to === "all" && ls.length >= members.length) return again("Someone has to remain to take the shares. Choose a buyer, or use Retire and admit.");
       if (f.to === "buyer" && ls.includes(f.buyer)) return again("The buyer can't be one of the retiring partners.");
       body = { type: "retirement", title: "Retire " + who,
-               inputs: { leavers: ls.map((id) => ({ memberId: id, ...(f.to === "buyer" ? { buyer: { memberId: f.buyer } } : {}) })) } };
+               inputs: { leavers: ls.map((id) => ({ memberId: id, ...(f.to === "buyer" ? { buyer: { memberId: f.buyer } } : {}) })),
+                         ...(f.to === "all" && hasDev ? { developer_takes_shares: f.devTakes } : {}) } };
     } else if (f.kind === "retire_admit") {
       const ls = f.leavers.filter(Boolean), js = f.joiners.map((j) => ({ name: j.name.trim(), units: j.units })).filter((j) => j.name);
       if (new Set(ls).size !== ls.length) return again("The same partner is listed twice.");
       let inputs;
-      if (how() === "resplit") inputs = { leavers: ls.map((id) => ({ memberId: id })), joiners: js, developer_sells_down: f.devSells };
+      if (how() === "resplit") inputs = { leavers: ls.map((id) => ({ memberId: id })), joiners: js, developer_sells_down: f.devSells, developer_takes_shares: f.devSells };
       else if (js.length === ls.length) inputs = { replacements: ls.map((id, i) => ({ leaver: { memberId: id }, joiner: { name: js[i].name } })) };
       else if (js.length === 1) inputs = { leavers: ls.map((id) => ({ memberId: id, buyer: { name: js[0].name } })) };
       else return again("For an exact takeover, list one new partner per retiring partner, or a single new partner or entity. Otherwise choose Re-split.");
