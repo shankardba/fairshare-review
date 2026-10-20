@@ -530,7 +530,7 @@ async function renderEvents(view, r) {
       <div class="card timeline">
         <div class="tl-filters">
           ${canDraft() ? `<a class="btn primary new-event" href="#/${r.org}/events/new">+ New event</a>` : ""}
-          <input class="search" id="q" placeholder="Search events or tabs…" value="${esc(state.filter.q)}">
+          <input class="search" id="q" placeholder="Search events…" value="${esc(state.filter.q)}">
           <div class="seg" id="types">${TYPES.filter((t) => state.user.role !== "investor" || t !== "Scenario").map((t) => `<button data-t="${t}">${t}</button>`).join("")}</div>
           ${state.user.role === "investor" ? "" : `<label class="toggle"><input type="checkbox" id="scen"> Include scenarios, summaries &amp; superseded</label>`}
         </div>
@@ -776,7 +776,7 @@ function drawTimeline(r) {
   const sc = $("#scen"); if (sc) sc.checked = f.scenarios;
   const q = f.q.trim().toLowerCase();
   const list = state.events.filter((e) => (f.scenarios || e.status === "Final" || e.status === "Draft" || e.id === r.id) && typeMatch(e, f.type)
-    && (!q || `${e.title} ${e.sheet} ${e.asOf}`.toLowerCase().includes(q)));
+    && (!q || `${e.title} ${e.asOf}`.toLowerCase().includes(q)));
   const groups = {};
   [...list].reverse().forEach((e) => { const y = e.status === "Draft" ? "Drafts" : e.status === "Scenario" ? "Scenarios & analyses" : (e.date || "").slice(0, 4) || "Undated"; (groups[y] = groups[y] || []).push(e); });
   const rank = (k) => (k === "Drafts" ? 0 : k.startsWith("S") ? 2 : 1);
@@ -841,7 +841,7 @@ async function drawReport(r) {
   $("#report").innerHTML = `
     <div class="rep-h">
       <div class="title">
-        <div class="rep-meta">${chip(e.type, e.status)}<span>As of ${esc(e.asOf || "—")}</span>${e.sheet && e.sheet !== e.title ? `<span>·</span><span>Source tab “${esc(e.sheet)}”</span>` : ""}${e.status !== "Final" ? `<span>·</span><b>${esc(e.status)}</b>` : ""}</div>
+        <div class="rep-meta">${chip(e.type, e.status)}<span>As of ${esc(e.asOf || "—")}</span>${e.status !== "Final" ? `<span>·</span><b>${esc(e.status)}</b>` : ""}</div>
         <h1>${esc(e.title)}</h1>
       </div>
       <div class="btns">
@@ -874,8 +874,8 @@ async function drawReport(r) {
     ${ch.length ? `<div class="changes"><h3>What changed</h3><ul id="chl">${ch.slice(0, 6).map((x) => `<li><b>${esc(shortName(x.name))}</b> — ${esc(x.note)}</li>`).join("")}</ul>${ch.length > 6 ? `<span class="more" id="chm">Show all ${ch.length} changes</span>` : ""}</div>` : ""}
     <div class="rep-tools">
       ${e.scoped ? "" : `<label class="toggle"><input type="checkbox" id="hx" ${f.hideExited ? "checked" : ""}> Hide exited members</label>`}
-      ${hiddenCols || f.allCols ? `<label class="toggle"><input type="checkbox" id="ac" ${f.allCols ? "checked" : ""}> Show all source columns</label>` : ""}
-      <span class="muted">${rows.length} rows${hiddenRows ? ` · ${hiddenRows} exited hidden` : ""}${hiddenCols ? ` · ${hiddenCols} legacy columns hidden` : ""}</span>
+      ${hiddenCols || f.allCols ? `<label class="toggle"><input type="checkbox" id="ac" ${f.allCols ? "checked" : ""}> Show all columns</label>` : ""}
+      <span class="muted">${rows.length} rows${hiddenRows ? ` · ${hiddenRows} exited hidden` : ""}${hiddenCols ? ` · ${hiddenCols} more columns hidden` : ""}</span>
     </div>
     <div class="tbl-wrap"><table class="rep"><thead><tr class="g">${g}</tr><tr class="c">${c}</tr></thead><tbody>${body}</tbody>${foot}</table></div>
     ${otherFacts.length || e.notes.length ? `<div class="notes">
@@ -1065,7 +1065,7 @@ function downloadCsv(e, cols, rows) {
   if (Object.keys(e.totals).length) lines.push(["Total", ...cols.map((c) => e.totals[c.id])].map(q).join(","));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-  a.download = `${e.sheet.replace(/[^\w.-]+/g, "_")}.csv`;
+  a.download = `${(e.title || "event").replace(/[^\w.-]+/g, "_")}.csv`;
   a.click();
 }
 
